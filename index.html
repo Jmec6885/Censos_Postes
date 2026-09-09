@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Censo de Postes</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f4f4f4;
+  }
+  #mapa {
+    height: 45vh;
+    width: 100%;
+  }
+  #panel {
+    padding: 12px;
+  }
+  #contador {
+    display: flex;
+    justify-content: space-between;
+    background: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .contador-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .bolita {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+    font-size: 14px;
+  }
+  select, textarea, input {
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+    box-sizing: border-box;
+    font-size: 14px;
+  }
+  #btnGps {
+    margin-top: 10px;
+    width: 100%;
+    padding: 12px;
+    background: #2b6cb0;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+  }
+  #btnGuardar {
+    margin-top: 14px;
+    width: 100%;
+    padding: 14px;
+    background: #2f855a;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+  }
+  #coordActual {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #444;
+  }
+</style>
+</head>
+<body>
+
+<div id="mapa"></div>
+
+<div id="panel">
+
+  <div id="contador"></div>
+
+  <div id="coordActual">Coordenada: sin capturar</div>
+  <button id="btnGps">Capturar coordenada GPS</button>
+
+  <label>Tipo de poste</label>
+  <select id="tipoPoste">
+    <option value="clesa_sin_lampara">Clesa via publica sin lampara</option>
+    <option value="clesa_con_lampara">Clesa via publica con lampara</option>
+    <option value="fuera_norma">Estructura fuera de norma con lampara</option>
+    <option value="privado">Poste privado con lampara</option>
+  </select>
+
+  <div id="bloquePotencia">
+    <label>Potencia</label>
+    <input type="text" id="potencia" placeholder="Ej: 100W">
+  </div>
+
+  <label>Tipo de lampara</label>
+  <input type="text" id="tipoLampara" placeholder="Ej: LED, sodio, etc">
+
+  <label>
+    <input type="checkbox" id="veinticuatroH" style="width:auto; display:inline-block;">
+    T-P 24 Horas
+  </label>
+
+  <label>Observaciones</label>
+  <textarea id="observaciones" rows="3"></textarea>
+
+  <label>Foto</label>
+  <input type="file" id="foto" accept="image/*" capture="environment">
+
+  <button id="btnGuardar">Guardar poste</button>
+
+</div>
+
+<script>
+// Colores por tipo de poste
+const COLORES = {
+  clesa_sin_lampara: "#2b6cb0",
+  clesa_con_lampara: "#d69e2e",
+  fuera_norma: "#c53030",
+  privado: "#6b46c1"
+};
+
+const NOMBRES = {
+  clesa_sin_lampara: "Sin lampara",
+  clesa_con_lampara: "Con lampara",
+  fuera_norma: "Fuera de norma",
+  privado: "Privado"
+};
+
+let coordenadaActual = null;
+
+// Mapa inicial centrado en Sonsonate como referencia
+const mapa = L.map('mapa').setView([13.7167, -89.7241], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap'
+}).addTo(mapa);
+
+// Permite tocar el mapa para ubicacion manual
+mapa.on('click', function(e) {
+  coordenadaActual = { lat: e.latlng.lat, lng: e.latlng.lng, manual: true };
+  document.getElementById('coordActual').innerText =
+    "Coordenada (manual): " + coordenadaActual.lat.toFixed(6) + ", " + coordenadaActual.lng.toFixed(6);
+});
+
+document.getElementById('btnGps').addEventListener('click', function() {
+  if (!navigator.geolocation) {
+    alert("Este dispositivo no tiene GPS disponible");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    coordenadaActual = { lat: pos.coords.latitude, lng: pos.coords.longitude, manual: false };
+    document.getElementById('coordActual').innerText =
+      "Coordenada (GPS): " + coordenadaActual.lat.toFixed(6) + ", " + coordenadaActual.lng.toFixed(6);
+    mapa.setView([coordenadaActual.lat, coordenadaActual.lng], 17);
+  }, function(err) {
+    alert("No se pudo obtener la coordenada: " + err.message);
+  }, { enableHighAccuracy: true });
+});
+
+// Muestra u oculta el campo de potencia segun el tipo
+document.getElementById('tipoPoste').addEventListener('change', function() {
+  const tipo = this.value;
+  document.getElementById('bloquePotencia').style.display =
+    (tipo === "clesa_con_lampara" || tipo === "fuera_norma" || tipo === "privado") ? "block" : "none";
+});
+
+function obtenerPostes() {
+  const datos = localStorage.getItem('postesCenso');
+  return datos ? JSON.parse(datos) : [];
+}
+
+function guardarPostes(lista) {
+  localStorage.setItem('postesCenso', JSON.stringify(lista));
+}
+
+function dibujarMarcadores() {
+  const postes = obtenerPostes();
+  postes.forEach(function(p) {
+    L.circleMarker([p.lat, p.lng], {
+      radius: 8,
+      fillColor: COLORES[p.tipo],
+      color: "#fff",
+      weight: 1,
+      fillOpacity: 1
+    }).addTo(mapa).bindPopup(NOMBRES[p.tipo]);
+  });
+}
+
+function actualizarContador() {
+  const postes = obtenerPostes();
+  const conteo = { clesa_sin_lampara: 0, clesa_con_lampara: 0, fuera_norma: 0, privado: 0 };
+  postes.forEach(function(p) { conteo[p.tipo]++; });
+
+  const contenedor = document.getElementById('contador');
+  contenedor.innerHTML = "";
+  Object.keys(NOMBRES).forEach(function(tipo) {
+    const item = document.createElement('div');
+    item.className = "contador-item";
+    item.innerHTML =
+      '<span class="bolita" style="background:' + COLORES[tipo] + '"></span>' +
+      NOMBRES[tipo] + ": " + conteo[tipo];
+    contenedor.appendChild(item);
+  });
+}
+
+document.getElementById('btnGuardar').addEventListener('click', function() {
+  if (!coordenadaActual) {
+    alert("Primero captura la coordenada del poste");
+    return;
+  }
+
+  const poste = {
+    id: Date.now(),
+    fecha: new Date().toLocaleDateString(),
+    hora: new Date().toLocaleTimeString(),
+    lat: coordenadaActual.lat,
+    lng: coordenadaActual.lng,
+    manual: coordenadaActual.manual,
+    tipo: document.getElementById('tipoPoste').value,
+    potencia: document.getElementById('potencia').value,
+    tipoLampara: document.getElementById('tipoLampara').value,
+    veinticuatroH: document.getElementById('veinticuatroH').checked,
+    observaciones: document.getElementById('observaciones').value,
+    sincronizado: false
+  };
+
+  const postes = obtenerPostes();
+  postes.push(poste);
+  guardarPostes(postes);
+
+  L.circleMarker([poste.lat, poste.lng], {
+    radius: 8,
+    fillColor: COLORES[poste.tipo],
+    color: "#fff",
+    weight: 1,
+    fillOpacity: 1
+  }).addTo(mapa).bindPopup(NOMBRES[poste.tipo]);
+
+  actualizarContador();
+
+  // Limpia el formulario para el siguiente poste
+  coordenadaActual = null;
+  document.getElementById('coordActual').innerText = "Coordenada: sin capturar";
+  document.getElementById('potencia').value = "";
+  document.getElementById('tipoLampara').value = "";
+  document.getElementById('veinticuatroH').checked = false;
+  document.getElementById('observaciones').value = "";
+  document.getElementById('foto').value = "";
+});
+
+// Al cargar la pagina, pinta lo que ya estaba guardado
+dibujarMarcadores();
+actualizarContador();
+</script>
+
+</body>
+</html>
