@@ -299,6 +299,10 @@ async function enviarPoste(poste) {
     body: JSON.stringify(poste)
   });
   const resultado = await respuesta.json();
+  if (!resultado.ok) {
+    console.log("Error del servidor: " + resultado.error);
+    window.ultimoErrorSync = resultado.error;
+  }
   return resultado.ok;
 }
 
@@ -340,7 +344,11 @@ document.getElementById('btnSincronizar').addEventListener('click', async functi
   boton.innerText = "Sincronizar";
   boton.disabled = false;
 
-  alert(enviados + " de " + pendientes.length + " postes sincronizados");
+  if (enviados < pendientes.length && window.ultimoErrorSync) {
+    alert(enviados + " de " + pendientes.length + " postes sincronizados. Error: " + window.ultimoErrorSync);
+  } else {
+    alert(enviados + " de " + pendientes.length + " postes sincronizados");
+  }
 });
 
 // Al cargar la pagina, pinta lo que ya estaba guardado
