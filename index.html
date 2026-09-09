@@ -298,9 +298,15 @@ async function enviarPoste(poste) {
     method: 'POST',
     body: JSON.stringify(poste)
   });
-  const resultado = await respuesta.json();
+  const texto = await respuesta.text();
+  let resultado;
+  try {
+    resultado = JSON.parse(texto);
+  } catch (errorParseo) {
+    window.ultimoErrorSync = "Respuesta no es JSON, status " + respuesta.status + ": " + texto.substring(0, 300);
+    return false;
+  }
   if (!resultado.ok) {
-    console.log("Error del servidor: " + resultado.error);
     window.ultimoErrorSync = resultado.error;
   }
   return resultado.ok;
@@ -334,6 +340,7 @@ document.getElementById('btnSincronizar').addEventListener('click', async functi
         enviados++;
       }
     } catch (error) {
+      window.ultimoErrorSync = "Fallo de red: " + error.message;
       console.log("Error enviando poste " + poste.id, error);
     }
   }
@@ -344,7 +351,7 @@ document.getElementById('btnSincronizar').addEventListener('click', async functi
   boton.innerText = "Sincronizar";
   boton.disabled = false;
 
-  if (enviados < pendientes.length && window.ultimoErrorSync) {
+  if (enviados < pendientes.length) {
     alert(enviados + " de " + pendientes.length + " postes sincronizados. Error: " + window.ultimoErrorSync);
   } else {
     alert(enviados + " de " + pendientes.length + " postes sincronizados");
