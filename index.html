@@ -123,6 +123,9 @@
 
   <button id="btnGuardar">Guardar poste</button>
 
+  <div id="estadoSync" style="margin-top:14px; font-size:13px; color:#444;">Pendientes por sincronizar: 0</div>
+  <button id="btnSincronizar" style="margin-top:8px; width:100%; padding:12px; background:#2b6cb0; color:white; border:none; border-radius:6px; font-size:15px;">Sincronizar</button>
+
 </div>
 
 <script>
@@ -142,6 +145,9 @@ const NOMBRES = {
 };
 
 let coordenadaActual = null;
+
+// Pega aqui la URL de tu Web App de Apps Script despues de implementarla
+const APPS_SCRIPT_URL = "PEGA_AQUI_LA_URL_DE_TU_WEB_APP";
 
 // Mapa inicial centrado en Sonsonate como referencia
 const mapa = L.map('mapa').setView([13.7167, -89.7241], 13);
@@ -219,10 +225,25 @@ function actualizarContador() {
   });
 }
 
-document.getElementById('btnGuardar').addEventListener('click', function() {
+function leerArchivoComoBase64(archivo) {
+  return new Promise(function(resolve, reject) {
+    const lector = new FileReader();
+    lector.onload = function() { resolve(lector.result); };
+    lector.onerror = reject;
+    lector.readAsDataURL(archivo);
+  });
+}
+
+document.getElementById('btnGuardar').addEventListener('click', async function() {
   if (!coordenadaActual) {
     alert("Primero captura la coordenada del poste");
     return;
+  }
+
+  const archivoFoto = document.getElementById('foto').files[0];
+  let fotoBase64 = null;
+  if (archivoFoto) {
+    fotoBase64 = await leerArchivoComoBase64(archivoFoto);
   }
 
   const poste = {
@@ -237,12 +258,14 @@ document.getElementById('btnGuardar').addEventListener('click', function() {
     tipoLampara: document.getElementById('tipoLampara').value,
     veinticuatroH: document.getElementById('veinticuatroH').checked,
     observaciones: document.getElementById('observaciones').value,
+    foto: fotoBase64,
     sincronizado: false
   };
 
   const postes = obtenerPostes();
   postes.push(poste);
   guardarPostes(postes);
+  actualizarEstadoSync();
 
   L.circleMarker([poste.lat, poste.lng], {
     radius: 8,
@@ -264,9 +287,66 @@ document.getElementById('btnGuardar').addEventListener('click', function() {
   document.getElementById('foto').value = "";
 });
 
+function actualizarEstadoSync() {
+  const postes = obtenerPostes();
+  const pendientes = postes.filter(function(p) { return !p.sincronizado; });
+  document.getElementById('estadoSync').innerText = "Pendientes por sincronizar: " + pendientes.length;
+}
+
+async function enviarPoste(poste) {
+  const respuesta = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify(poste)
+  });
+  const resultado = await respuesta.json();
+  return resultado.ok;
+}
+
+document.getElementById('btnSincronizar').addEventListener('click', async function() {
+  if (!navigator.onLine) {
+    alert("No hay conexion en este momento, intenta cuando tengas senal");
+    return;
+  }
+
+  const postes = obtenerPostes();
+  const pendientes = postes.filter(function(p) { return !p.sincronizado; });
+
+  if (pendientes.length === 0) {
+    alert("No hay postes pendientes por sincronizar");
+    return;
+  }
+
+  const boton = document.getElementById('btnSincronizar');
+  boton.innerText = "Sincronizando...";
+  boton.disabled = true;
+
+  let enviados = 0;
+
+  for (const poste of pendientes) {
+    try {
+      const ok = await enviarPoste(poste);
+      if (ok) {
+        poste.sincronizado = true;
+        enviados++;
+      }
+    } catch (error) {
+      console.log("Error enviando poste " + poste.id, error);
+    }
+  }
+
+  guardarPostes(postes);
+  actualizarEstadoSync();
+
+  boton.innerText = "Sincronizar";
+  boton.disabled = false;
+
+  alert(enviados + " de " + pendientes.length + " postes sincronizados");
+});
+
 // Al cargar la pagina, pinta lo que ya estaba guardado
 dibujarMarcadores();
 actualizarContador();
+actualizarEstadoSync();
 </script>
 
 </body>
