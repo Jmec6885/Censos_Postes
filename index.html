@@ -456,9 +456,8 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
     actualizarEstadoSync();
     dibujarListaPostes();
 
-    intentarSincronizarAutomatico(original.id);
+    intentarSincronizarAutomatico(original.id, true);
 
-    alert("Poste actualizado");
     limpiarFormulario();
     return;
   }
@@ -524,8 +523,11 @@ async function enviarPoste(poste) {
   return resultado.ok;
 }
 
-async function intentarSincronizarAutomatico(idPoste) {
+async function intentarSincronizarAutomatico(idPoste, mostrarAlerta) {
   if (!navigator.onLine) {
+    if (mostrarAlerta) {
+      alert("No hay señal en este momento, el cambio queda pendiente de sincronizar.");
+    }
     return;
   }
 
@@ -543,9 +545,17 @@ async function intentarSincronizarAutomatico(idPoste) {
       poste.sincronizado = true;
       guardarPostes(postes);
       dibujarListaPostes();
+      if (mostrarAlerta) {
+        alert("Cambio enviado a la hoja de Sheets correctamente");
+      }
+    } else if (mostrarAlerta) {
+      alert("No se pudo enviar el cambio a la hoja: " + window.ultimoErrorSync);
     }
   } catch (error) {
     console.log("No se pudo sincronizar automaticamente: " + error.message);
+    if (mostrarAlerta) {
+      alert("No se pudo enviar el cambio a la hoja: " + error.message);
+    }
   }
 
   actualizarEstadoSync();
@@ -728,6 +738,11 @@ async function borrarPoste(id) {
       if (!resultado.ok) {
         alert("No se pudo borrar en la hoja: " + resultado.error);
         return;
+      }
+      if (!resultado.borrado) {
+        alert("Aviso: en tu celular se borro, pero la hoja no encontro ese ID (" + resultado.idBuscado + "). Revisa la hoja manualmente.");
+      } else {
+        alert("Borrado tambien en la hoja de Sheets");
       }
     } catch (error) {
       alert("No se pudo borrar en la hoja: " + error.message);
