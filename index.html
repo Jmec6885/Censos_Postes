@@ -81,6 +81,27 @@
     font-size: 13px;
     color: #444;
   }
+  .tarjetaPoste {
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 8px;
+    font-size: 13px;
+    border-left: 5px solid #ccc;
+  }
+  .tarjetaPoste .fila {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .btnBorrarPoste {
+    background: #c53030;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 </style>
 </head>
 <body>
@@ -177,6 +198,11 @@
 
   <div id="estadoSync" style="margin-top:14px; font-size:13px; color:#444;">Pendientes por sincronizar: 0</div>
   <button id="btnSincronizar" style="margin-top:8px; width:100%; padding:12px; background:#2b6cb0; color:white; border:none; border-radius:6px; font-size:15px;">Sincronizar</button>
+  <button id="btnNuevoMunicipio" style="margin-top:8px; width:100%; padding:12px; background:#744210; color:white; border:none; border-radius:6px; font-size:15px;">Nuevo municipio (limpiar mapa)</button>
+
+  <button id="btnVerLista" style="margin-top:8px; width:100%; padding:12px; background:#4a5568; color:white; border:none; border-radius:6px; font-size:15px;">Ver postes guardados</button>
+
+  <div id="listaPostes" style="display:none; margin-top:10px;"></div>
 
 </div>
 
@@ -197,9 +223,10 @@ const NOMBRES = {
 };
 
 let coordenadaActual = null;
+let capasMarcadores = [];
 
 // Pega aqui la URL de tu Web App de Apps Script despues de implementarla
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx8t_wWWvNhGNtZbvupqc36zhT0od2U2O0DZG84w2VTy3A3huSGwInR411F1T84YAcO8g/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNlPmxv9D2yDv1Mft__4UgLy4K9swC7FLmFCBCOvdoaTUnNFr_qwd-lZdGJvr5A4s_Ug/exec";
 
 // Mapa inicial centrado en Sonsonate como referencia
 const mapa = L.map('mapa').setView([13.7167, -89.7241], 13);
@@ -250,14 +277,22 @@ function guardarPostes(lista) {
 function dibujarMarcadores() {
   const postes = obtenerPostes();
   postes.forEach(function(p) {
-    L.circleMarker([p.lat, p.lng], {
+    const marcador = L.circleMarker([p.lat, p.lng], {
       radius: 8,
       fillColor: COLORES[p.tipo],
       color: "#fff",
       weight: 1,
       fillOpacity: 1
     }).addTo(mapa).bindPopup(NOMBRES[p.tipo]);
+    capasMarcadores.push(marcador);
   });
+}
+
+function limpiarCapasMarcadores() {
+  capasMarcadores.forEach(function(marcador) {
+    mapa.removeLayer(marcador);
+  });
+  capasMarcadores = [];
 }
 
 function actualizarContador() {
@@ -326,13 +361,16 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
   guardarPostes(postes);
   actualizarEstadoSync();
 
-  L.circleMarker([poste.lat, poste.lng], {
+  intentarSincronizarAutomatico(poste.id);
+
+  const marcadorNuevo = L.circleMarker([poste.lat, poste.lng], {
     radius: 8,
     fillColor: COLORES[poste.tipo],
     color: "#fff",
     weight: 1,
     fillOpacity: 1
   }).addTo(mapa).bindPopup(NOMBRES[poste.tipo]);
+  capasMarcadores.push(marcadorNuevo);
 
   actualizarContador();
 
@@ -371,9 +409,37 @@ async function enviarPoste(poste) {
   return resultado.ok;
 }
 
-document.getElementById('btnSincronizar').addEventListener('click', async function() {
+async function intentarSincronizarAutomatico(idPoste) {
   if (!navigator.onLine) {
-    alert("No hay conexion en este momento, intenta cuando tengas senal");
+    return;
+  }
+
+  const postes = obtenerPostes();
+  const poste = postes.find(function(p) { return p.id === idPoste; });
+  if (!poste || poste.sincronizado) {
+    return;
+  }
+
+  document.getElementById('estadoSync').innerText = "Enviando poste recien guardado...";
+
+  try {
+    const ok = await enviarPoste(poste);
+    if (ok) {
+      poste.sincronizado = true;
+      guardarPostes(postes);
+    }
+  } catch (error) {
+    console.log("No se pudo sincronizar automaticamente: " + error.message);
+  }
+
+  actualizarEstadoSync();
+}
+
+async function sincronizarPendientes(mostrarAlertas) {
+  if (!navigator.onLine) {
+    if (mostrarAlertas) {
+      alert("No hay conexion en este momento, intenta cuando tengas senal");
+    }
     return;
   }
 
@@ -381,7 +447,9 @@ document.getElementById('btnSincronizar').addEventListener('click', async functi
   const pendientes = postes.filter(function(p) { return !p.sincronizado; });
 
   if (pendientes.length === 0) {
-    alert("No hay postes pendientes por sincronizar");
+    if (mostrarAlertas) {
+      alert("No hay postes pendientes por sincronizar");
+    }
     return;
   }
 
@@ -410,12 +478,146 @@ document.getElementById('btnSincronizar').addEventListener('click', async functi
   boton.innerText = "Sincronizar";
   boton.disabled = false;
 
-  if (enviados < pendientes.length) {
-    alert(enviados + " de " + pendientes.length + " postes sincronizados. Error: " + window.ultimoErrorSync);
+  if (mostrarAlertas) {
+    if (enviados < pendientes.length) {
+      alert(enviados + " de " + pendientes.length + " postes sincronizados. Error: " + window.ultimoErrorSync);
+    } else {
+      alert(enviados + " de " + pendientes.length + " postes sincronizados");
+    }
+  }
+}
+
+document.getElementById('btnSincronizar').addEventListener('click', function() {
+  sincronizarPendientes(true);
+});
+
+// Cuando el celular recupera senal, manda automaticamente todo lo pendiente
+window.addEventListener('online', function() {
+  sincronizarPendientes(false);
+});
+
+document.getElementById('btnNuevoMunicipio').addEventListener('click', function() {
+  const postes = obtenerPostes();
+  const pendientes = postes.filter(function(p) { return !p.sincronizado; });
+
+  if (pendientes.length > 0) {
+    const continuar = confirm(
+      "Tienes " + pendientes.length + " poste(s) sin sincronizar. " +
+      "Se recomienda sincronizar antes de continuar. " +
+      "Si continuas, esos postes sin sincronizar se mantienen guardados, solo se limpia el mapa. Continuar?"
+    );
+    if (!continuar) {
+      return;
+    }
   } else {
-    alert(enviados + " de " + pendientes.length + " postes sincronizados");
+    const confirmar = confirm("Esto limpia el mapa y el contador para empezar un municipio nuevo. Continuar?");
+    if (!confirmar) {
+      return;
+    }
+  }
+
+  // Solo se borran del celular los que ya estan seguros en la hoja de Sheets
+  const soloPendientes = postes.filter(function(p) { return !p.sincronizado; });
+  guardarPostes(soloPendientes);
+
+  limpiarCapasMarcadores();
+  dibujarMarcadores();
+  actualizarContador();
+  actualizarEstadoSync();
+
+  document.getElementById('municipio').value = "";
+
+  alert("Mapa y contador limpios. Tu hoja de Google Sheets no fue modificada.");
+});
+
+document.getElementById('btnVerLista').addEventListener('click', function() {
+  const contenedor = document.getElementById('listaPostes');
+  if (contenedor.style.display === "none") {
+    dibujarListaPostes();
+    contenedor.style.display = "block";
+    this.innerText = "Ocultar postes guardados";
+  } else {
+    contenedor.style.display = "none";
+    this.innerText = "Ver postes guardados";
   }
 });
+
+function dibujarListaPostes() {
+  const postes = obtenerPostes();
+  const contenedor = document.getElementById('listaPostes');
+  contenedor.innerHTML = "";
+
+  if (postes.length === 0) {
+    contenedor.innerHTML = "<div style='font-size:13px; color:#666;'>No hay postes guardados todavia</div>";
+    return;
+  }
+
+  postes.slice().reverse().forEach(function(p) {
+    const tarjeta = document.createElement('div');
+    tarjeta.className = "tarjetaPoste";
+    tarjeta.style.borderLeftColor = COLORES[p.tipo];
+    tarjeta.innerHTML =
+      "<div class='fila'>" +
+        "<div>" +
+          "<strong>" + NOMBRES[p.tipo] + "</strong><br>" +
+          (p.municipio || "Sin municipio") + " - " + p.fecha + " " + p.hora + "<br>" +
+          (p.sincronizado ? "Sincronizado" : "Pendiente") +
+        "</div>" +
+        "<button class='btnBorrarPoste' data-id='" + p.id + "'>Borrar</button>" +
+      "</div>";
+    contenedor.appendChild(tarjeta);
+  });
+
+  contenedor.querySelectorAll('.btnBorrarPoste').forEach(function(boton) {
+    boton.addEventListener('click', function() {
+      borrarPoste(Number(this.getAttribute('data-id')));
+    });
+  });
+}
+
+async function borrarPoste(id) {
+  const postes = obtenerPostes();
+  const poste = postes.find(function(p) { return p.id === id; });
+  if (!poste) {
+    return;
+  }
+
+  const confirmar = confirm("Seguro que quieres borrar este poste? Esta accion no se puede deshacer.");
+  if (!confirmar) {
+    return;
+  }
+
+  if (poste.sincronizado) {
+    if (!navigator.onLine) {
+      alert("Este poste ya esta en tu hoja de Sheets. Necesitas señal para borrarlo tambien alla.");
+      return;
+    }
+    try {
+      const respuesta = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ accion: "borrar", id: poste.id })
+      });
+      const texto = await respuesta.text();
+      const resultado = JSON.parse(texto);
+      if (!resultado.ok) {
+        alert("No se pudo borrar en la hoja: " + resultado.error);
+        return;
+      }
+    } catch (error) {
+      alert("No se pudo borrar en la hoja: " + error.message);
+      return;
+    }
+  }
+
+  const restantes = postes.filter(function(p) { return p.id !== id; });
+  guardarPostes(restantes);
+
+  limpiarCapasMarcadores();
+  dibujarMarcadores();
+  actualizarContador();
+  actualizarEstadoSync();
+  dibujarListaPostes();
+}
 
 // Al cargar la pagina, pinta lo que ya estaba guardado
 dibujarMarcadores();
