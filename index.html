@@ -94,6 +94,58 @@
   <div id="coordActual">Coordenada: sin capturar</div>
   <button id="btnGps">Capturar coordenada GPS</button>
 
+  <label>Municipio</label>
+  <select id="municipio">
+    <option value="">Seleccione</option>
+    <optgroup label="Sonsonate">
+      <option value="Acajutla">Acajutla</option>
+      <option value="Armenia">Armenia</option>
+      <option value="Caluco">Caluco</option>
+      <option value="Cuisnahuat">Cuisnahuat</option>
+      <option value="Izalco">Izalco</option>
+      <option value="Juayua">Juayua</option>
+      <option value="Nahuizalco">Nahuizalco</option>
+      <option value="Nahulingo">Nahulingo</option>
+      <option value="Salcoatitan">Salcoatitan</option>
+      <option value="San Antonio del Monte">San Antonio del Monte</option>
+      <option value="San Julian">San Julian</option>
+      <option value="Santa Catarina Masahuat">Santa Catarina Masahuat</option>
+      <option value="Santa Isabel Ishuatan">Santa Isabel Ishuatan</option>
+      <option value="Santo Domingo de Guzman">Santo Domingo de Guzman</option>
+      <option value="Sonsonate">Sonsonate</option>
+      <option value="Sonzacate">Sonzacate</option>
+    </optgroup>
+    <optgroup label="Ahuachapan">
+      <option value="Ahuachapan">Ahuachapan</option>
+      <option value="Apaneca">Apaneca</option>
+      <option value="Atiquizaya">Atiquizaya</option>
+      <option value="Concepcion de Ataco">Concepcion de Ataco</option>
+      <option value="El Refugio">El Refugio</option>
+      <option value="Guaymango">Guaymango</option>
+      <option value="Jujutla">Jujutla</option>
+      <option value="San Francisco Menendez">San Francisco Menendez</option>
+      <option value="San Lorenzo">San Lorenzo</option>
+      <option value="San Pedro Puxtla">San Pedro Puxtla</option>
+      <option value="Tacuba">Tacuba</option>
+      <option value="Turin">Turin</option>
+    </optgroup>
+    <optgroup label="Santa Ana">
+      <option value="Candelaria de la Frontera">Candelaria de la Frontera</option>
+      <option value="Chalchuapa">Chalchuapa</option>
+      <option value="Coatepeque">Coatepeque</option>
+      <option value="El Congo">El Congo</option>
+      <option value="El Porvenir">El Porvenir</option>
+      <option value="Masahuat">Masahuat</option>
+      <option value="Metapan">Metapan</option>
+      <option value="San Antonio Pajonal">San Antonio Pajonal</option>
+      <option value="San Sebastian Salitrillo">San Sebastian Salitrillo</option>
+      <option value="Santa Ana">Santa Ana</option>
+      <option value="Santa Rosa Guachipilin">Santa Rosa Guachipilin</option>
+      <option value="Santiago de la Frontera">Santiago de la Frontera</option>
+      <option value="Texistepeque">Texistepeque</option>
+    </optgroup>
+  </select>
+
   <label>Tipo de poste</label>
   <select id="tipoPoste">
     <option value="clesa_sin_lampara">Clesa via publica sin lampara</option>
@@ -240,6 +292,12 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
     return;
   }
 
+  const municipio = document.getElementById('municipio').value;
+  if (!municipio) {
+    alert("Selecciona el municipio antes de guardar");
+    return;
+  }
+
   const archivoFoto = document.getElementById('foto').files[0];
   let fotoBase64 = null;
   if (archivoFoto) {
@@ -250,6 +308,7 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
     id: Date.now(),
     fecha: new Date().toLocaleDateString(),
     hora: new Date().toLocaleTimeString(),
+    municipio: municipio,
     lat: coordenadaActual.lat,
     lng: coordenadaActual.lng,
     manual: coordenadaActual.manual,
