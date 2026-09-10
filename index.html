@@ -253,7 +253,7 @@ let capasMarcadores = [];
 let posteEnEdicion = null;
 
 // URL de tu Web App de Apps Script
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx8t_wWWvNhGNtZbvupqc36zhT0od2U2O0DZG84w2VTy3A3huSGwInR411F1T84YAcO8g/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNlPmxv9D2yDv1Mft__4UgLy4K9swC7FLmFCBCOvdoaTUnNFr_qwd-lZdGJvr5A4s_Ug/exec";
 
 // Mapa inicial centrado en Sonsonate como referencia
 const mapa = L.map('mapa', { preferCanvas: true }).setView([13.7167, -89.7241], 13);
@@ -406,8 +406,13 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
 
   const tipoSeleccionado = document.getElementById('tipoPoste').value;
   const tipoLampara = document.getElementById('tipoLampara').value.trim();
+  const potenciaValor = document.getElementById('potencia').value.trim();
   if (tipoSeleccionado !== "clesa_sin_lampara" && tipoLampara === "") {
     alert("Este tipo de poste lleva lampara, indica el tipo de lampara antes de guardar");
+    return;
+  }
+  if (tipoSeleccionado !== "clesa_sin_lampara" && potenciaValor === "") {
+    alert("Este tipo de poste lleva lampara, indica la potencia antes de guardar");
     return;
   }
 
@@ -657,9 +662,6 @@ document.getElementById('btnVerLista').addEventListener('click', function() {
 function dibujarListaPostes() {
   const postes = obtenerPostes();
   const contenedor = document.getElementById('listaPostes');
-  if (contenedor.style.display === "none") {
-    return;
-  }
   contenedor.innerHTML = "";
 
   if (postes.length === 0) {
