@@ -94,6 +94,10 @@
     justify-content: space-between;
     align-items: center;
   }
+  .tarjetaPoste .botones {
+    display: flex;
+    gap: 6px;
+  }
   .btnBorrarPoste {
     background: #c53030;
     color: white;
@@ -101,6 +105,23 @@
     border-radius: 5px;
     padding: 6px 10px;
     font-size: 12px;
+  }
+  .btnEditarPoste {
+    background: #2b6cb0;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .popupBotones button {
+    margin-top: 4px;
+    margin-right: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    color: white;
   }
 </style>
 </head>
@@ -204,6 +225,11 @@
 
   <div id="listaPostes" style="display:none; margin-top:10px;"></div>
 
+  <label style="margin-top:18px;">Guia KML (solo referencia, no se guarda)</label>
+  <input type="file" id="archivoKml" accept=".kml">
+  <button id="btnToggleKml" style="margin-top:8px; width:100%; padding:12px; background:#555; color:white; border:none; border-radius:6px; font-size:15px;">Mostrar guia KML</button>
+  <div id="estadoKml" style="margin-top:8px; font-size:13px; color:#444;"></div>
+
 </div>
 
 <script>
@@ -224,12 +250,13 @@ const NOMBRES = {
 
 let coordenadaActual = null;
 let capasMarcadores = [];
+let posteEnEdicion = null;
 
-// Pega aqui la URL de tu Web App de Apps Script despues de implementarla
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx8t_wWWvNhGNtZbvupqc36zhT0od2U2O0DZG84w2VTy3A3huSGwInR411F1T84YAcO8g/exec";
+// URL de tu Web App de Apps Script
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNlPmxv9D2yDv1Mft__4UgLy4K9swC7FLmFCBCOvdoaTUnNFr_qwd-lZdGJvr5A4s_Ug/exec";
 
 // Mapa inicial centrado en Sonsonate como referencia
-const mapa = L.map('mapa').setView([13.7167, -89.7241], 13);
+const mapa = L.map('mapa', { preferCanvas: true }).setView([13.7167, -89.7241], 13);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
@@ -274,6 +301,15 @@ function guardarPostes(lista) {
   localStorage.setItem('postesCenso', JSON.stringify(lista));
 }
 
+function contenidoPopup(p) {
+  return "<div class='popupBotones'>" +
+    "<strong>" + NOMBRES[p.tipo] + "</strong><br>" +
+    (p.municipio || "") +
+    "<br><button style='background:#2b6cb0;' onclick='editarPosteDesdeMapa(" + p.id + ")'>Editar</button>" +
+    "<button style='background:#c53030;' onclick='borrarPoste(" + p.id + ")'>Eliminar</button>" +
+    "</div>";
+}
+
 function dibujarMarcadores() {
   const postes = obtenerPostes();
   postes.forEach(function(p) {
@@ -283,7 +319,7 @@ function dibujarMarcadores() {
       color: "#fff",
       weight: 1,
       fillOpacity: 1
-    }).addTo(mapa).bindPopup(NOMBRES[p.tipo]);
+    }).addTo(mapa).bindPopup(contenidoPopup(p));
     capasMarcadores.push(marcador);
   });
 }
@@ -321,6 +357,41 @@ function leerArchivoComoBase64(archivo) {
   });
 }
 
+function limpiarFormulario() {
+  coordenadaActual = null;
+  document.getElementById('coordActual').innerText = "Coordenada: sin capturar";
+  document.getElementById('potencia').value = "";
+  document.getElementById('tipoLampara').value = "";
+  document.getElementById('veinticuatroH').checked = false;
+  document.getElementById('observaciones').value = "";
+  document.getElementById('foto').value = "";
+  posteEnEdicion = null;
+  document.getElementById('btnGuardar').innerText = "Guardar poste";
+}
+
+function editarPosteDesdeMapa(id) {
+  const postes = obtenerPostes();
+  const poste = postes.find(function(p) { return p.id === id; });
+  if (!poste) {
+    return;
+  }
+  posteEnEdicion = id;
+  coordenadaActual = { lat: poste.lat, lng: poste.lng, manual: poste.manual };
+  document.getElementById('coordActual').innerText =
+    "Editando poste. Coordenada actual: " + poste.lat.toFixed(6) + ", " + poste.lng.toFixed(6) +
+    " (toca el mapa o usa GPS solo si quieres cambiarla)";
+  document.getElementById('municipio').value = poste.municipio || "";
+  document.getElementById('tipoPoste').value = poste.tipo;
+  document.getElementById('tipoPoste').dispatchEvent(new Event('change'));
+  document.getElementById('potencia').value = poste.potencia || "";
+  document.getElementById('tipoLampara').value = poste.tipoLampara || "";
+  document.getElementById('veinticuatroH').checked = !!poste.veinticuatroH;
+  document.getElementById('observaciones').value = poste.observaciones || "";
+  document.getElementById('btnGuardar').innerText = "Guardar cambios";
+  mapa.closePopup();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 document.getElementById('btnGuardar').addEventListener('click', async function() {
   if (!coordenadaActual) {
     alert("Primero captura la coordenada del poste");
@@ -346,6 +417,47 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
     fotoBase64 = await leerArchivoComoBase64(archivoFoto);
   }
 
+  const postes = obtenerPostes();
+
+  if (posteEnEdicion) {
+    const indice = postes.findIndex(function(p) { return p.id === posteEnEdicion; });
+    if (indice === -1) {
+      alert("No se encontro el poste a editar");
+      limpiarFormulario();
+      return;
+    }
+    const original = postes[indice];
+    postes[indice] = {
+      id: original.id,
+      fecha: original.fecha,
+      hora: original.hora,
+      municipio: municipio,
+      lat: coordenadaActual.lat,
+      lng: coordenadaActual.lng,
+      manual: coordenadaActual.manual,
+      tipo: tipoSeleccionado,
+      potencia: document.getElementById('potencia').value,
+      tipoLampara: tipoLampara,
+      veinticuatroH: document.getElementById('veinticuatroH').checked,
+      observaciones: document.getElementById('observaciones').value,
+      foto: fotoBase64 || original.foto,
+      sincronizado: false
+    };
+    guardarPostes(postes);
+
+    limpiarCapasMarcadores();
+    dibujarMarcadores();
+    actualizarContador();
+    actualizarEstadoSync();
+    dibujarListaPostes();
+
+    intentarSincronizarAutomatico(original.id);
+
+    alert("Poste actualizado");
+    limpiarFormulario();
+    return;
+  }
+
   const poste = {
     id: Date.now(),
     fecha: new Date().toLocaleDateString(),
@@ -354,16 +466,15 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
     lat: coordenadaActual.lat,
     lng: coordenadaActual.lng,
     manual: coordenadaActual.manual,
-    tipo: document.getElementById('tipoPoste').value,
+    tipo: tipoSeleccionado,
     potencia: document.getElementById('potencia').value,
-    tipoLampara: document.getElementById('tipoLampara').value,
+    tipoLampara: tipoLampara,
     veinticuatroH: document.getElementById('veinticuatroH').checked,
     observaciones: document.getElementById('observaciones').value,
     foto: fotoBase64,
     sincronizado: false
   };
 
-  const postes = obtenerPostes();
   postes.push(poste);
   guardarPostes(postes);
   actualizarEstadoSync();
@@ -376,19 +487,11 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
     color: "#fff",
     weight: 1,
     fillOpacity: 1
-  }).addTo(mapa).bindPopup(NOMBRES[poste.tipo]);
+  }).addTo(mapa).bindPopup(contenidoPopup(poste));
   capasMarcadores.push(marcadorNuevo);
 
   actualizarContador();
-
-  // Limpia el formulario para el siguiente poste
-  coordenadaActual = null;
-  document.getElementById('coordActual').innerText = "Coordenada: sin capturar";
-  document.getElementById('potencia').value = "";
-  document.getElementById('tipoLampara').value = "";
-  document.getElementById('veinticuatroH').checked = false;
-  document.getElementById('observaciones').value = "";
-  document.getElementById('foto').value = "";
+  limpiarFormulario();
 });
 
 function actualizarEstadoSync() {
@@ -434,6 +537,7 @@ async function intentarSincronizarAutomatico(idPoste) {
     if (ok) {
       poste.sincronizado = true;
       guardarPostes(postes);
+      dibujarListaPostes();
     }
   } catch (error) {
     console.log("No se pudo sincronizar automaticamente: " + error.message);
@@ -481,6 +585,7 @@ async function sincronizarPendientes(mostrarAlertas) {
 
   guardarPostes(postes);
   actualizarEstadoSync();
+  dibujarListaPostes();
 
   boton.innerText = "Sincronizar";
   boton.disabled = false;
@@ -523,7 +628,6 @@ document.getElementById('btnNuevoMunicipio').addEventListener('click', function(
     }
   }
 
-  // Solo se borran del celular los que ya estan seguros en la hoja de Sheets
   const soloPendientes = postes.filter(function(p) { return !p.sincronizado; });
   guardarPostes(soloPendientes);
 
@@ -531,6 +635,7 @@ document.getElementById('btnNuevoMunicipio').addEventListener('click', function(
   dibujarMarcadores();
   actualizarContador();
   actualizarEstadoSync();
+  dibujarListaPostes();
 
   document.getElementById('municipio').value = "";
 
@@ -552,6 +657,9 @@ document.getElementById('btnVerLista').addEventListener('click', function() {
 function dibujarListaPostes() {
   const postes = obtenerPostes();
   const contenedor = document.getElementById('listaPostes');
+  if (contenedor.style.display === "none") {
+    return;
+  }
   contenedor.innerHTML = "";
 
   if (postes.length === 0) {
@@ -570,7 +678,10 @@ function dibujarListaPostes() {
           (p.municipio || "Sin municipio") + " - " + p.fecha + " " + p.hora + "<br>" +
           (p.sincronizado ? "Sincronizado" : "Pendiente") +
         "</div>" +
-        "<button class='btnBorrarPoste' data-id='" + p.id + "'>Borrar</button>" +
+        "<div class='botones'>" +
+          "<button class='btnEditarPoste' data-id='" + p.id + "'>Editar</button>" +
+          "<button class='btnBorrarPoste' data-id='" + p.id + "'>Borrar</button>" +
+        "</div>" +
       "</div>";
     contenedor.appendChild(tarjeta);
   });
@@ -578,6 +689,12 @@ function dibujarListaPostes() {
   contenedor.querySelectorAll('.btnBorrarPoste').forEach(function(boton) {
     boton.addEventListener('click', function() {
       borrarPoste(Number(this.getAttribute('data-id')));
+    });
+  });
+
+  contenedor.querySelectorAll('.btnEditarPoste').forEach(function(boton) {
+    boton.addEventListener('click', function() {
+      editarPosteDesdeMapa(Number(this.getAttribute('data-id')));
     });
   });
 }
@@ -624,6 +741,93 @@ async function borrarPoste(id) {
   actualizarContador();
   actualizarEstadoSync();
   dibujarListaPostes();
+}
+
+// ---- Guia KML de referencia (no se guarda, solo se muestra) ----
+let capasGuiaKml = [];
+let kmlVisible = false;
+
+document.getElementById('archivoKml').addEventListener('change', async function() {
+  const archivo = this.files[0];
+  if (!archivo) {
+    return;
+  }
+
+  document.getElementById('estadoKml').innerText = "Leyendo archivo KML...";
+
+  const texto = await archivo.text();
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(texto, "application/xml");
+  const placemarks = xml.getElementsByTagName("Placemark");
+
+  limpiarCapasKml();
+
+  let cargados = 0;
+  for (let i = 0; i < placemarks.length; i++) {
+    const puntos = placemarks[i].getElementsByTagName("coordinates");
+    if (puntos.length === 0) {
+      continue;
+    }
+    const texto = puntos[0].textContent.trim();
+    const partes = texto.split(",");
+    const lon = parseFloat(partes[0]);
+    const lat = parseFloat(partes[1]);
+    if (isNaN(lat) || isNaN(lon)) {
+      continue;
+    }
+    const marcador = L.circleMarker([lat, lon], {
+      radius: 5,
+      color: "#000",
+      fillColor: "#999",
+      weight: 1,
+      fillOpacity: 0.8
+    }).bindPopup("Punto de guia (KML)");
+    capasGuiaKml.push(marcador);
+    cargados++;
+  }
+
+  document.getElementById('estadoKml').innerText = cargados + " puntos de guia cargados. Usa el boton para mostrarlos u ocultarlos.";
+
+  if (!kmlVisible) {
+    kmlVisible = true;
+    document.getElementById('btnToggleKml').innerText = "Ocultar guia KML";
+    mostrarCapasKml();
+  }
+});
+
+function mostrarCapasKml() {
+  capasGuiaKml.forEach(function(marcador) {
+    marcador.addTo(mapa);
+  });
+}
+
+function limpiarCapasKml() {
+  capasGuiaKml.forEach(function(marcador) {
+    mapa.removeLayer(marcador);
+  });
+  capasGuiaKml = [];
+}
+
+document.getElementById('btnToggleKml').addEventListener('click', function() {
+  if (capasGuiaKml.length === 0) {
+    alert("Primero carga un archivo KML");
+    return;
+  }
+  if (kmlVisible) {
+    limpiarCapasKmlSoloMapa();
+    kmlVisible = false;
+    this.innerText = "Mostrar guia KML";
+  } else {
+    mostrarCapasKml();
+    kmlVisible = true;
+    this.innerText = "Ocultar guia KML";
+  }
+});
+
+function limpiarCapasKmlSoloMapa() {
+  capasGuiaKml.forEach(function(marcador) {
+    mapa.removeLayer(marcador);
+  });
 }
 
 // Al cargar la pagina, pinta lo que ya estaba guardado
