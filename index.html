@@ -136,6 +136,11 @@
   <div id="coordActual">Coordenada: sin capturar</div>
   <button id="btnGps">Capturar coordenada GPS</button>
 
+  <label style="margin-top:18px;">Mapa sin señal</label>
+  <div style="font-size:12px; color:#666; margin-top:2px;">Navega y haz zoom hasta la zona donde vas a trabajar, luego descarga.</div>
+  <button id="btnDescargarMapa" style="margin-top:8px; width:100%; padding:12px; background:#2c5282; color:white; border:none; border-radius:6px; font-size:15px;">Descargar mapa de esta zona</button>
+  <div id="estadoMapaOffline" style="margin-top:8px; font-size:13px; color:#444;"></div>
+
   <label>Municipio</label>
   <select id="municipio">
     <option value="">Seleccione</option>
@@ -230,6 +235,9 @@
   <button id="btnToggleKml" style="margin-top:8px; width:100%; padding:12px; background:#555; color:white; border:none; border-radius:6px; font-size:15px;">Mostrar guia KML</button>
   <div id="estadoKml" style="margin-top:8px; font-size:13px; color:#444;"></div>
 
+  <label style="margin-top:18px;">Exportar tus postes censados</label>
+  <button id="btnExportarKml" style="margin-top:8px; width:100%; padding:12px; background:#1a7f5a; color:white; border:none; border-radius:6px; font-size:15px;">Exportar KML de mis postes</button>
+
 </div>
 
 <script>
@@ -258,7 +266,87 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNlPmxv9D2yDv1
 // Mapa inicial centrado en Sonsonate como referencia
 const mapa = L.map('mapa', { preferCanvas: true }).setView([13.7167, -89.7241], 13);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+// ---- Base de datos local (IndexedDB) para guardar las imagenes del mapa ----
+let dbOffline = null;
+
+function abrirDBOffline() {
+  return new Promise(function(resolve, reject) {
+    if (dbOffline) {
+      resolve(dbOffline);
+      return;
+    }
+    const peticion = indexedDB.open('mapaOfflineDB', 1);
+    peticion.onupgradeneeded = function(e) {
+      e.target.result.createObjectStore('tiles');
+    };
+    peticion.onsuccess = function(e) {
+      dbOffline = e.target.result;
+      resolve(dbOffline);
+    };
+    peticion.onerror = function(e) {
+      reject(e);
+    };
+  });
+}
+
+function guardarTileDB(clave, blob) {
+  return abrirDBOffline().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      const tx = db.transaction('tiles', 'readwrite');
+      tx.objectStore('tiles').put(blob, clave);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function(e) { reject(e); };
+    });
+  });
+}
+
+function obtenerTileDB(clave) {
+  return abrirDBOffline().then(function(db) {
+    return new Promise(function(resolve) {
+      const tx = db.transaction('tiles', 'readonly');
+      const peticion = tx.objectStore('tiles').get(clave);
+      peticion.onsuccess = function() { resolve(peticion.result || null); };
+      peticion.onerror = function() { resolve(null); };
+    });
+  });
+}
+
+// Capa de mapa que primero busca la imagen guardada en el celular, y solo pide internet si no la tiene
+const CapaMapaOffline = L.GridLayer.extend({
+  createTile: function(coords, done) {
+    const tile = document.createElement('img');
+    const z = coords.z, x = coords.x, y = coords.y;
+    const clave = z + '_' + x + '_' + y;
+
+    obtenerTileDB(clave).then(function(blobGuardado) {
+      if (blobGuardado) {
+        tile.src = URL.createObjectURL(blobGuardado);
+        done(null, tile);
+        return;
+      }
+      if (!navigator.onLine) {
+        done(null, tile);
+        return;
+      }
+      const url = 'https://a.tile.openstreetmap.org/' + z + '/' + x + '/' + y + '.png';
+      fetch(url).then(function(resp) {
+        if (!resp.ok) {
+          throw new Error('sin tile');
+        }
+        return resp.blob();
+      }).then(function(blobNuevo) {
+        tile.src = URL.createObjectURL(blobNuevo);
+        done(null, tile);
+      }).catch(function() {
+        done(null, tile);
+      });
+    });
+
+    return tile;
+  }
+});
+
+new CapaMapaOffline({
   maxZoom: 19,
   attribution: '&copy; OpenStreetMap'
 }).addTo(mapa);
@@ -846,6 +934,140 @@ function limpiarCapasKmlSoloMapa() {
     mapa.removeLayer(marcador);
   });
 }
+
+// ---- Exportar los postes censados como KML ----
+function escaparXml(texto) {
+  if (texto === null || texto === undefined) {
+    return "";
+  }
+  return String(texto)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+document.getElementById('btnExportarKml').addEventListener('click', function() {
+  const postes = obtenerPostes();
+
+  if (postes.length === 0) {
+    alert("No hay postes guardados para exportar");
+    return;
+  }
+
+  let placemarks = "";
+  postes.forEach(function(p) {
+    const descripcion =
+      "Municipio: " + escaparXml(p.municipio) + "\n" +
+      "Tipo: " + escaparXml(NOMBRES[p.tipo]) + "\n" +
+      "Tipo de lampara: " + escaparXml(p.tipoLampara) + "\n" +
+      "Potencia: " + escaparXml(p.potencia) + "\n" +
+      "24H: " + (p.veinticuatroH ? "Si" : "No") + "\n" +
+      "Observaciones: " + escaparXml(p.observaciones) + "\n" +
+      "Fecha: " + escaparXml(p.fecha) + " " + escaparXml(p.hora) + "\n" +
+      "Sincronizado: " + (p.sincronizado ? "Si" : "No");
+
+    placemarks +=
+      "<Placemark>" +
+      "<name>" + escaparXml(NOMBRES[p.tipo]) + "</name>" +
+      "<description><![CDATA[" + descripcion + "]]></description>" +
+      "<Point><coordinates>" + p.lng + "," + p.lat + ",0</coordinates></Point>" +
+      "</Placemark>";
+  });
+
+  const kml =
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' +
+    "<name>Censo de Postes</name>" +
+    placemarks +
+    "</Document></kml>";
+
+  const blob = new Blob([kml], { type: "application/vnd.google-earth.kml+xml" });
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  const fecha = new Date().toISOString().slice(0, 10);
+  enlace.download = "censo_postes_" + fecha + ".kml";
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  URL.revokeObjectURL(url);
+});
+
+// ---- Descargar el mapa de la zona visible para usarlo sin señal ----
+function long2tile(lon, zoom) {
+  return Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+}
+
+function lat2tile(lat, zoom) {
+  return Math.floor(
+    (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom)
+  );
+}
+
+document.getElementById('btnDescargarMapa').addEventListener('click', async function() {
+  if (!navigator.onLine) {
+    alert("Necesitas señal para descargar el mapa de esta zona");
+    return;
+  }
+
+  const bounds = mapa.getBounds();
+  const zooms = [14, 15, 16, 17];
+  const listaTiles = [];
+
+  zooms.forEach(function(z) {
+    const x1 = long2tile(bounds.getWest(), z);
+    const x2 = long2tile(bounds.getEast(), z);
+    const y1 = lat2tile(bounds.getNorth(), z);
+    const y2 = lat2tile(bounds.getSouth(), z);
+    for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
+      for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
+        listaTiles.push({ z: z, x: x, y: y });
+      }
+    }
+  });
+
+  if (listaTiles.length > 4000) {
+    const continuar = confirm(
+      "Esta zona tiene " + listaTiles.length + " imagenes de mapa, puede tardar varios minutos y pesar bastante. " +
+      "Si es mucha area, acerca mas el zoom antes de descargar. Continuar de todas formas?"
+    );
+    if (!continuar) {
+      return;
+    }
+  }
+
+  const boton = document.getElementById('btnDescargarMapa');
+  boton.disabled = true;
+  let hechos = 0;
+  let nuevos = 0;
+
+  for (const t of listaTiles) {
+    const clave = t.z + '_' + t.x + '_' + t.y;
+    const existente = await obtenerTileDB(clave);
+    if (!existente) {
+      try {
+        const url = 'https://a.tile.openstreetmap.org/' + t.z + '/' + t.x + '/' + t.y + '.png';
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          await guardarTileDB(clave, blob);
+          nuevos++;
+        }
+      } catch (error) {
+        console.log("No se pudo descargar tile " + clave);
+      }
+    }
+    hechos++;
+    if (hechos % 15 === 0 || hechos === listaTiles.length) {
+      document.getElementById('estadoMapaOffline').innerText =
+        "Descargando: " + hechos + " de " + listaTiles.length;
+    }
+  }
+
+  document.getElementById('estadoMapaOffline').innerText =
+    "Listo. " + nuevos + " imagenes nuevas guardadas (" + listaTiles.length + " revisadas en total). Ya puedes usar esta zona sin señal.";
+  boton.disabled = false;
+});
 
 // Al cargar la pagina, pinta lo que ya estaba guardado
 dibujarMarcadores();
