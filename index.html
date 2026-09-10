@@ -398,15 +398,26 @@ function contenidoPopup(p) {
     "</div>";
 }
 
+function crearIconoGota(color) {
+  const svg =
+    "<svg width='26' height='34' viewBox='0 0 24 32' xmlns='http://www.w3.org/2000/svg'>" +
+    "<path d='M12 0C5.4 0 0 5.4 0 12c0 9 12 20 12 20s12-11 12-20c0-6.6-5.4-12-12-12z' fill='" + color + "' stroke='#fff' stroke-width='1'/>" +
+    "<circle cx='12' cy='12' r='5' fill='#fff'/>" +
+    "</svg>";
+  return L.divIcon({
+    html: svg,
+    className: "",
+    iconSize: [26, 34],
+    iconAnchor: [13, 34],
+    popupAnchor: [0, -30]
+  });
+}
+
 function dibujarMarcadores() {
   const postes = obtenerPostes();
   postes.forEach(function(p) {
-    const marcador = L.circleMarker([p.lat, p.lng], {
-      radius: 8,
-      fillColor: COLORES[p.tipo],
-      color: "#fff",
-      weight: 1,
-      fillOpacity: 1
+    const marcador = L.marker([p.lat, p.lng], {
+      icon: crearIconoGota(COLORES[p.tipo])
     }).addTo(mapa).bindPopup(contenidoPopup(p));
     capasMarcadores.push(marcador);
   });
@@ -573,12 +584,8 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
 
   intentarSincronizarAutomatico(poste.id);
 
-  const marcadorNuevo = L.circleMarker([poste.lat, poste.lng], {
-    radius: 8,
-    fillColor: COLORES[poste.tipo],
-    color: "#fff",
-    weight: 1,
-    fillOpacity: 1
+  const marcadorNuevo = L.marker([poste.lat, poste.lng], {
+    icon: crearIconoGota(COLORES[poste.tipo])
   }).addTo(mapa).bindPopup(contenidoPopup(poste));
   capasMarcadores.push(marcadorNuevo);
 
