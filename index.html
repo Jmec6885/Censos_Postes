@@ -368,11 +368,57 @@ new CapaMapaOffline({
   attribution: '&copy; OpenStreetMap'
 }).addTo(mapa);
 
+// Marcador temporal que aparece justo al capturar una coordenada, para elegir el tipo ahi mismo
+let marcadorTemporal = null;
+
+function popupSelectorTipo() {
+  let opciones = "";
+  Object.keys(NOMBRES).forEach(function(key) {
+    opciones += "<option value='" + key + "'>" + NOMBRES[key] + "</option>";
+  });
+  return "<div style='font-size:13px;'>" +
+    "<strong>Elige el tipo de poste:</strong><br>" +
+    "<select onchange='elegirTipoDesdeMapa(this.value)' style='margin-top:4px; width:170px;'>" +
+    "<option value=''>Selecciona...</option>" +
+    opciones +
+    "</select>" +
+    "</div>";
+}
+
+function mostrarMarcadorTemporal(lat, lng) {
+  if (marcadorTemporal) {
+    mapa.removeLayer(marcadorTemporal);
+  }
+  marcadorTemporal = L.marker([lat, lng], {
+    icon: crearIconoGota("#a0aec0")
+  }).addTo(mapa).bindPopup(popupSelectorTipo());
+  marcadorTemporal.openPopup();
+}
+
+function elegirTipoDesdeMapa(valor) {
+  if (!valor) {
+    return;
+  }
+  document.getElementById('tipoPoste').value = valor;
+  document.getElementById('tipoPoste').dispatchEvent(new Event('change'));
+  if (marcadorTemporal) {
+    marcadorTemporal.setIcon(crearIconoGota(COLORES[valor]));
+  }
+}
+
+function quitarMarcadorTemporal() {
+  if (marcadorTemporal) {
+    mapa.removeLayer(marcadorTemporal);
+    marcadorTemporal = null;
+  }
+}
+
 // Permite tocar el mapa para ubicacion manual
 mapa.on('click', function(e) {
   coordenadaActual = { lat: e.latlng.lat, lng: e.latlng.lng, manual: true };
   document.getElementById('coordActual').innerText =
     "Coordenada (manual): " + coordenadaActual.lat.toFixed(6) + ", " + coordenadaActual.lng.toFixed(6);
+  mostrarMarcadorTemporal(e.latlng.lat, e.latlng.lng);
 });
 
 document.getElementById('btnGps').addEventListener('click', function() {
@@ -385,6 +431,7 @@ document.getElementById('btnGps').addEventListener('click', function() {
     document.getElementById('coordActual').innerText =
       "Coordenada (GPS): " + coordenadaActual.lat.toFixed(6) + ", " + coordenadaActual.lng.toFixed(6);
     mapa.setView([coordenadaActual.lat, coordenadaActual.lng], 17);
+    mostrarMarcadorTemporal(coordenadaActual.lat, coordenadaActual.lng);
   }, function(err) {
     alert("No se pudo obtener la coordenada: " + err.message);
   }, { enableHighAccuracy: true });
@@ -396,6 +443,7 @@ document.getElementById('btnUsarCentro').addEventListener('click', function() {
   coordenadaActual = { lat: centro.lat, lng: centro.lng, manual: true };
   document.getElementById('coordActual').innerText =
     "Coordenada (cruz central): " + centro.lat.toFixed(6) + ", " + centro.lng.toFixed(6);
+  mostrarMarcadorTemporal(centro.lat, centro.lng);
 });
 
 // Punto azul de ubicacion en vivo, se mueve solo mientras este activo
@@ -533,6 +581,7 @@ function limpiarFormulario() {
   document.getElementById('foto').value = "";
   posteEnEdicion = null;
   document.getElementById('btnGuardar').innerText = "Guardar poste";
+  quitarMarcadorTemporal();
 }
 
 function editarPosteDesdeMapa(id) {
