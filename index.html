@@ -127,7 +127,21 @@
 </head>
 <body>
 
-<div id="mapa"></div>
+<div id="contenedorMapa" style="position:relative;">
+  <div id="mapa"></div>
+  <div id="cruzCentro" style="
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    pointer-events:none;
+    z-index:500;
+    font-size:28px;
+    font-weight:bold;
+    color:#c53030;
+    text-shadow: 0 0 3px white, 0 0 3px white;
+  ">+</div>
+</div>
 
 <div id="panel">
 
@@ -135,6 +149,9 @@
 
   <div id="coordActual">Coordenada: sin capturar</div>
   <button id="btnGps">Capturar coordenada GPS</button>
+  <button id="btnUsarCentro" style="margin-top:8px; width:100%; padding:10px; background:#805ad5; color:white; border:none; border-radius:6px; font-size:14px;">Usar la cruz (+) del centro como coordenada</button>
+
+  <button id="btnUbicacionVivo" style="margin-top:8px; width:100%; padding:10px; background:#3182ce; color:white; border:none; border-radius:6px; font-size:14px;">Activar mi ubicacion en vivo</button>
 
   <label style="margin-top:18px;">Mapa sin señal</label>
   <div style="font-size:12px; color:#666; margin-top:2px;">Navega y haz zoom hasta la zona donde vas a trabajar, luego descarga.</div>
@@ -371,6 +388,56 @@ document.getElementById('btnGps').addEventListener('click', function() {
   }, function(err) {
     alert("No se pudo obtener la coordenada: " + err.message);
   }, { enableHighAccuracy: true });
+});
+
+// Usa la cruz fija del centro del mapa como coordenada manual
+document.getElementById('btnUsarCentro').addEventListener('click', function() {
+  const centro = mapa.getCenter();
+  coordenadaActual = { lat: centro.lat, lng: centro.lng, manual: true };
+  document.getElementById('coordActual').innerText =
+    "Coordenada (cruz central): " + centro.lat.toFixed(6) + ", " + centro.lng.toFixed(6);
+});
+
+// Punto azul de ubicacion en vivo, se mueve solo mientras este activo
+let watchIdUbicacion = null;
+let marcadorUbicacionVivo = null;
+
+const iconoUbicacionVivo = L.divIcon({
+  html: "<div style='width:16px; height:16px; background:#3182ce; border:3px solid white; border-radius:50%; box-shadow:0 0 4px rgba(0,0,0,0.5);'></div>",
+  className: "",
+  iconSize: [16, 16],
+  iconAnchor: [8, 8]
+});
+
+document.getElementById('btnUbicacionVivo').addEventListener('click', function() {
+  if (watchIdUbicacion) {
+    navigator.geolocation.clearWatch(watchIdUbicacion);
+    watchIdUbicacion = null;
+    if (marcadorUbicacionVivo) {
+      mapa.removeLayer(marcadorUbicacionVivo);
+      marcadorUbicacionVivo = null;
+    }
+    this.innerText = "Activar mi ubicacion en vivo";
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    alert("Este dispositivo no tiene GPS disponible");
+    return;
+  }
+
+  this.innerText = "Desactivar mi ubicacion en vivo";
+
+  watchIdUbicacion = navigator.geolocation.watchPosition(function(pos) {
+    const latlng = [pos.coords.latitude, pos.coords.longitude];
+    if (!marcadorUbicacionVivo) {
+      marcadorUbicacionVivo = L.marker(latlng, { icon: iconoUbicacionVivo, zIndexOffset: 1000 }).addTo(mapa);
+    } else {
+      marcadorUbicacionVivo.setLatLng(latlng);
+    }
+  }, function(err) {
+    console.log("Error de ubicacion en vivo: " + err.message);
+  }, { enableHighAccuracy: true, maximumAge: 2000 });
 });
 
 // Muestra u oculta el campo de potencia segun el tipo
@@ -859,6 +926,20 @@ async function borrarPoste(id) {
 let capasGuiaKml = [];
 let kmlVisible = false;
 
+function colorPorNombreKml(nombre) {
+  const texto = (nombre || "").toLowerCase();
+  if (texto.indexOf("privado") !== -1) {
+    return "#c53030";
+  }
+  if (texto.indexOf("alcald") !== -1) {
+    return "#d69e2e";
+  }
+  if (texto.indexOf("aes") !== -1) {
+    return "#2f855a";
+  }
+  return "#4a5568";
+}
+
 document.getElementById('archivoKml').addEventListener('change', async function() {
   const archivo = this.files[0];
   if (!archivo) {
@@ -887,13 +968,18 @@ document.getElementById('archivoKml').addEventListener('change', async function(
     if (isNaN(lat) || isNaN(lon)) {
       continue;
     }
+
+    const tagsNombre = placemarks[i].getElementsByTagName("name");
+    const nombre = tagsNombre.length > 0 ? tagsNombre[0].textContent.trim() : "Punto de guia";
+    const color = colorPorNombreKml(nombre);
+
     const marcador = L.circleMarker([lat, lon], {
-      radius: 5,
+      radius: 6,
       color: "#000",
-      fillColor: "#999",
+      fillColor: color,
       weight: 1,
-      fillOpacity: 0.8
-    }).bindPopup("Punto de guia (KML)");
+      fillOpacity: 0.85
+    }).bindPopup("Guia: " + nombre);
     capasGuiaKml.push(marcador);
     cargados++;
   }
