@@ -989,6 +989,32 @@ function colorPorNombreKml(nombre) {
   return "#4a5568";
 }
 
+function armarPopupKml(placemark, nombre) {
+  let html = "<div style='font-size:13px; max-width:220px;'><strong>" + nombre + "</strong><br>";
+
+  const tagsDescripcion = placemark.getElementsByTagName("description");
+  if (tagsDescripcion.length > 0 && tagsDescripcion[0].textContent.trim() !== "") {
+    html += "<div style='margin-top:4px;'>" + tagsDescripcion[0].textContent.trim().replace(/\n/g, "<br>") + "</div>";
+  }
+
+  const datosExtendidos = placemark.getElementsByTagName("Data");
+  if (datosExtendidos.length > 0) {
+    html += "<table style='margin-top:4px; font-size:12px;'>";
+    for (let d = 0; d < datosExtendidos.length; d++) {
+      const nombreDato = datosExtendidos[d].getAttribute("name") || "";
+      const valores = datosExtendidos[d].getElementsByTagName("value");
+      const valorDato = valores.length > 0 ? valores[0].textContent.trim() : "";
+      if (nombreDato && valorDato) {
+        html += "<tr><td style='padding-right:6px; color:#666;'>" + nombreDato + "</td><td>" + valorDato + "</td></tr>";
+      }
+    }
+    html += "</table>";
+  }
+
+  html += "</div>";
+  return html;
+}
+
 document.getElementById('archivoKml').addEventListener('change', async function() {
   const archivo = this.files[0];
   if (!archivo) {
@@ -1022,13 +1048,15 @@ document.getElementById('archivoKml').addEventListener('change', async function(
     const nombre = tagsNombre.length > 0 ? tagsNombre[0].textContent.trim() : "Punto de guia";
     const color = colorPorNombreKml(nombre);
 
+    const contenidoPopupKml = armarPopupKml(placemarks[i], nombre);
+
     const marcador = L.circleMarker([lat, lon], {
       radius: 6,
       color: "#000",
       fillColor: color,
       weight: 1,
       fillOpacity: 0.85
-    }).bindPopup("Guia: " + nombre);
+    }).bindPopup(contenidoPopupKml);
     capasGuiaKml.push(marcador);
     cargados++;
   }
