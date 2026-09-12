@@ -7,29 +7,34 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
+  * {
+    box-sizing: border-box;
+  }
   body {
-    font-family: Arial, sans-serif;
+    font-family: -apple-system, Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background: #f4f4f4;
+    background: #eef1f4;
   }
   #mapa {
-    height: 45vh;
+    height: 62vh;
     width: 100%;
   }
-  #panel {
-    padding: 12px;
-  }
   #contador {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 450;
     display: flex;
     justify-content: space-between;
-    background: white;
-    padding: 8px 12px;
+    background: rgba(255,255,255,0.92);
+    padding: 6px 10px;
     border-radius: 8px;
-    margin-bottom: 12px;
-    font-size: 13px;
+    font-size: 11px;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   }
   .contador-item {
     display: flex;
@@ -37,8 +42,8 @@
     gap: 4px;
   }
   .bolita {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     display: inline-block;
   }
@@ -46,7 +51,8 @@
     display: block;
     margin-top: 10px;
     font-weight: bold;
-    font-size: 14px;
+    font-size: 13px;
+    color: #2d3748;
   }
   select, textarea, input {
     width: 100%;
@@ -54,35 +60,101 @@
     margin-top: 4px;
     box-sizing: border-box;
     font-size: 14px;
-  }
-  #btnGps {
-    margin-top: 10px;
-    width: 100%;
-    padding: 12px;
-    background: #2b6cb0;
-    color: white;
-    border: none;
+    border: 1px solid #cbd5e0;
     border-radius: 6px;
-    font-size: 15px;
   }
-  #btnGuardar {
-    margin-top: 14px;
-    width: 100%;
-    padding: 14px;
-    background: #2f855a;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 16px;
-    font-weight: bold;
+  button {
+    cursor: pointer;
+  }
+
+  /* Barra fija debajo del mapa: solo lo esencial */
+  #barraInferior {
+    background: white;
+    padding: 10px 12px;
+    box-shadow: 0 -1px 4px rgba(0,0,0,0.08);
   }
   #coordActual {
-    margin-top: 8px;
-    font-size: 13px;
-    color: #444;
+    font-size: 12px;
+    color: #4a5568;
+    margin-bottom: 6px;
   }
-  .tarjetaPoste {
+  .filaBotonesPrincipales {
+    display: flex;
+    gap: 8px;
+  }
+  .filaBotonesPrincipales button {
+    flex: 1;
+    padding: 12px 6px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+  }
+  #btnGps {
+    background: #2b6cb0;
+  }
+  #btnUsarCentro {
+    background: #805ad5;
+  }
+  #btnToggleHerramientas {
+    margin-top: 10px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    background: #f7fafc;
+    color: #2d3748;
+    font-size: 13px;
+    font-weight: bold;
+  }
+
+  /* Panel colapsable de herramientas secundarias */
+  #panelHerramientas {
+    padding: 12px;
+  }
+  .seccionHerramientas {
     background: white;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .tituloSeccion {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #718096;
+    border-bottom: 1px solid #edf2f7;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+  .seccionHerramientas button {
+    margin-top: 8px;
+    width: 100%;
+    padding: 11px;
+    background: #4a5568;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  #btnGuardar {
+    background: #2f855a;
+    font-weight: bold;
+    font-size: 15px;
+  }
+  #btnSincronizar { background: #2b6cb0; }
+  #btnNuevoMunicipio { background: #744210; }
+  #btnDescargarMapa { background: #2c5282; }
+  #btnUbicacionVivo { background: #3182ce; }
+  #btnToggleKml { background: #555; }
+  #btnExportarKml { background: #1a7f5a; }
+  #btnCargarDesdeSheet { background: #4a5568; }
+
+  .tarjetaPoste {
+    background: #f7fafc;
     border-radius: 8px;
     padding: 10px;
     margin-top: 8px;
@@ -135,10 +207,12 @@
   }
 </style>
 </head>
+
 <body>
 
 <div id="contenedorMapa" style="position:relative;">
   <div id="mapa"></div>
+  <div id="contador"></div>
   <div id="cruzCentro" style="
     position:absolute;
     top:50%;
@@ -167,20 +241,13 @@
   ">⌖</button>
 </div>
 
-<div id="panel">
-
-  <div id="contador"></div>
-
+<div id="barraInferior">
   <div id="coordActual">Coordenada: sin capturar</div>
-  <button id="btnGps">Capturar coordenada GPS</button>
-  <button id="btnUsarCentro" style="margin-top:8px; width:100%; padding:10px; background:#805ad5; color:white; border:none; border-radius:6px; font-size:14px;">Usar la cruz (+) del centro como coordenada</button>
 
-  <button id="btnUbicacionVivo" style="margin-top:8px; width:100%; padding:10px; background:#3182ce; color:white; border:none; border-radius:6px; font-size:14px;">Activar mi ubicacion en vivo</button>
-
-  <label style="margin-top:18px;">Mapa sin señal</label>
-  <div style="font-size:12px; color:#666; margin-top:2px;">Navega y haz zoom hasta la zona donde vas a trabajar, luego descarga.</div>
-  <button id="btnDescargarMapa" style="margin-top:8px; width:100%; padding:12px; background:#2c5282; color:white; border:none; border-radius:6px; font-size:15px;">Descargar mapa de esta zona</button>
-  <div id="estadoMapaOffline" style="margin-top:8px; font-size:13px; color:#444;"></div>
+  <div class="filaBotonesPrincipales">
+    <button id="btnGps">📍 Capturar GPS</button>
+    <button id="btnUsarCentro">✛ Usar cruz</button>
+  </div>
 
   <label>Municipio</label>
   <select id="municipio">
@@ -234,53 +301,77 @@
     </optgroup>
   </select>
 
-  <button id="btnCargarDesdeSheet" style="margin-top:8px; width:100%; padding:10px; background:#4a5568; color:white; border:none; border-radius:6px; font-size:14px;">Ver postes ya censados de este municipio (Sheets)</button>
-  <div id="estadoCargaSheet" style="margin-top:6px; font-size:12px; color:#444;"></div>
+  <button id="btnToggleHerramientas">☰ Más herramientas</button>
+</div>
 
-  <label>Tipo de poste</label>
-  <select id="tipoPoste">
-    <option value="clesa_sin_lampara">Clesa via publica sin lampara</option>
-    <option value="clesa_con_lampara">Clesa via publica con lampara</option>
-    <option value="fuera_norma">Estructura fuera de norma con lampara</option>
-    <option value="privado">Poste privado con lampara</option>
-  </select>
+<div id="panelHerramientas" style="display:none;">
 
-  <div id="bloquePotencia">
-    <label>Potencia</label>
-    <input type="text" id="potencia" placeholder="Ej: 100W">
+  <div class="seccionHerramientas">
+    <div class="tituloSeccion">Detalle del poste (para editar o completar)</div>
+
+    <label>Tipo de poste</label>
+    <select id="tipoPoste">
+      <option value="clesa_sin_lampara">Clesa via publica sin lampara</option>
+      <option value="clesa_con_lampara">Clesa via publica con lampara</option>
+      <option value="fuera_norma">Estructura fuera de norma con lampara</option>
+      <option value="privado">Poste privado con lampara</option>
+    </select>
+
+    <div id="bloquePotencia">
+      <label>Potencia</label>
+      <input type="text" id="potencia" placeholder="Ej: 100W">
+    </div>
+
+    <label>Tipo de lampara</label>
+    <input type="text" id="tipoLampara" placeholder="Ej: LED, sodio, etc">
+
+    <label>
+      <input type="checkbox" id="veinticuatroH" style="width:auto; display:inline-block;">
+      T-P 24 Horas
+    </label>
+
+    <label>Observaciones</label>
+    <textarea id="observaciones" rows="3"></textarea>
+
+    <label>Foto</label>
+    <input type="file" id="foto" accept="image/*" capture="environment">
+
+    <button id="btnGuardar">Guardar poste</button>
   </div>
 
-  <label>Tipo de lampara</label>
-  <input type="text" id="tipoLampara" placeholder="Ej: LED, sodio, etc">
+  <div class="seccionHerramientas">
+    <div class="tituloSeccion">Sincronizacion</div>
+    <div id="estadoSync" style="font-size:13px; color:#444;">Pendientes por sincronizar: 0</div>
+    <button id="btnSincronizar">Sincronizar</button>
+    <button id="btnNuevoMunicipio">Nuevo municipio (limpiar mapa)</button>
+  </div>
 
-  <label>
-    <input type="checkbox" id="veinticuatroH" style="width:auto; display:inline-block;">
-    T-P 24 Horas
-  </label>
+  <div class="seccionHerramientas">
+    <div class="tituloSeccion">Mapas</div>
 
-  <label>Observaciones</label>
-  <textarea id="observaciones" rows="3"></textarea>
+    <div style="font-size:12px; color:#666;">Navega y haz zoom hasta la zona donde vas a trabajar, luego descarga.</div>
+    <button id="btnDescargarMapa">Descargar mapa de esta zona</button>
+    <div id="estadoMapaOffline" style="font-size:13px; color:#444;"></div>
 
-  <label>Foto</label>
-  <input type="file" id="foto" accept="image/*" capture="environment">
+    <button id="btnUbicacionVivo" style="margin-top:10px;">Activar mi ubicacion en vivo</button>
 
-  <button id="btnGuardar">Guardar poste</button>
+    <label style="margin-top:14px;">Guia KML (solo referencia, no se guarda)</label>
+    <input type="file" id="archivoKml" accept=".kml">
+    <button id="btnToggleKml">Mostrar guia KML</button>
+    <div id="estadoKml" style="font-size:13px; color:#444;"></div>
+  </div>
 
-  <div id="estadoSync" style="margin-top:14px; font-size:13px; color:#444;">Pendientes por sincronizar: 0</div>
-  <button id="btnSincronizar" style="margin-top:8px; width:100%; padding:12px; background:#2b6cb0; color:white; border:none; border-radius:6px; font-size:15px;">Sincronizar</button>
-  <button id="btnNuevoMunicipio" style="margin-top:8px; width:100%; padding:12px; background:#744210; color:white; border:none; border-radius:6px; font-size:15px;">Nuevo municipio (limpiar mapa)</button>
+  <div class="seccionHerramientas">
+    <div class="tituloSeccion">Datos</div>
 
-  <button id="btnVerLista" style="margin-top:8px; width:100%; padding:12px; background:#4a5568; color:white; border:none; border-radius:6px; font-size:15px;">Ver postes guardados</button>
+    <button id="btnVerLista">Ver postes guardados</button>
+    <div id="listaPostes" style="display:none; margin-top:10px;"></div>
 
-  <div id="listaPostes" style="display:none; margin-top:10px;"></div>
+    <button id="btnCargarDesdeSheet" style="margin-top:10px;">Ver postes ya censados de este municipio (Sheets)</button>
+    <div id="estadoCargaSheet" style="font-size:12px; color:#444;"></div>
 
-  <label style="margin-top:18px;">Guia KML (solo referencia, no se guarda)</label>
-  <input type="file" id="archivoKml" accept=".kml">
-  <button id="btnToggleKml" style="margin-top:8px; width:100%; padding:12px; background:#555; color:white; border:none; border-radius:6px; font-size:15px;">Mostrar guia KML</button>
-  <div id="estadoKml" style="margin-top:8px; font-size:13px; color:#444;"></div>
-
-  <label style="margin-top:18px;">Exportar tus postes censados</label>
-  <button id="btnExportarKml" style="margin-top:8px; width:100%; padding:12px; background:#1a7f5a; color:white; border:none; border-radius:6px; font-size:15px;">Exportar KML de mis postes</button>
+    <button id="btnExportarKml" style="margin-top:10px;">Exportar KML de mis postes</button>
+  </div>
 
 </div>
 
@@ -759,8 +850,28 @@ function editarPosteDesdeMapa(id) {
   document.getElementById('observaciones').value = poste.observaciones || "";
   document.getElementById('btnGuardar').innerText = "Guardar cambios";
   mapa.closePopup();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  abrirPanelHerramientas();
+  document.getElementById('panelHerramientas').scrollIntoView({ behavior: 'smooth' });
 }
+
+function abrirPanelHerramientas() {
+  document.getElementById('panelHerramientas').style.display = "block";
+  document.getElementById('btnToggleHerramientas').innerText = "▲ Ocultar herramientas";
+}
+
+function cerrarPanelHerramientas() {
+  document.getElementById('panelHerramientas').style.display = "none";
+  document.getElementById('btnToggleHerramientas').innerText = "☰ Más herramientas";
+}
+
+document.getElementById('btnToggleHerramientas').addEventListener('click', function() {
+  const panel = document.getElementById('panelHerramientas');
+  if (panel.style.display === "none") {
+    abrirPanelHerramientas();
+  } else {
+    cerrarPanelHerramientas();
+  }
+});
 
 document.getElementById('btnGuardar').addEventListener('click', async function() {
   if (!coordenadaActual) {
