@@ -239,6 +239,32 @@
     font-size:20px;
     color:#3182ce;
   ">⌖</button>
+  <button id="btnPotencias" style="
+    position:absolute;
+    bottom:62px;
+    right:12px;
+    z-index:500;
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    border:none;
+    background:white;
+    box-shadow:0 1px 4px rgba(0,0,0,0.4);
+    font-size:20px;
+  ">💡</button>
+  <div id="panelPotencias" style="
+    display:none;
+    position:absolute;
+    bottom:110px;
+    right:12px;
+    z-index:450;
+    background:white;
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:12px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.3);
+    max-width:150px;
+  "></div>
 </div>
 
 <div id="barraInferior">
@@ -399,7 +425,8 @@ let posteEnEdicion = null;
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNlPmxv9D2yDv1Mft__4UgLy4K9swC7FLmFCBCOvdoaTUnNFr_qwd-lZdGJvr5A4s_Ug/exec";
 
 // Mapa inicial centrado en Sonsonate como referencia
-const mapa = L.map('mapa', { preferCanvas: true }).setView([13.7167, -89.7241], 13);
+const mapa = L.map('mapa', { preferCanvas: true, zoomControl: false }).setView([13.7167, -89.7241], 13);
+L.control.zoom({ position: 'bottomleft' }).addTo(mapa);
 
 // ---- Base de datos local (IndexedDB) para guardar las imagenes del mapa ----
 let dbOffline = null;
@@ -1557,6 +1584,46 @@ document.getElementById('btnCargarDesdeSheet').addEventListener('click', async f
   } catch (error) {
     document.getElementById('estadoCargaSheet').innerText = "Error al consultar: " + error.message;
   }
+});
+
+// ---- Conteo de lamparas por potencia ----
+document.getElementById('btnPotencias').addEventListener('click', function() {
+  const panel = document.getElementById('panelPotencias');
+  if (panel.style.display === "block") {
+    panel.style.display = "none";
+    return;
+  }
+
+  const postes = obtenerPostes();
+  const conteo = {};
+  postes.forEach(function(p) {
+    if (p.tipo === "clesa_sin_lampara") {
+      return;
+    }
+    const valor = (p.potencia || "").trim();
+    const clave = valor === "" ? "Sin dato" : valor;
+    conteo[clave] = (conteo[clave] || 0) + 1;
+  });
+
+  const claves = Object.keys(conteo).sort(function(a, b) {
+    const na = parseFloat(a), nb = parseFloat(b);
+    if (isNaN(na) || isNaN(nb)) {
+      return a.localeCompare(b);
+    }
+    return na - nb;
+  });
+
+  if (claves.length === 0) {
+    panel.innerHTML = "<strong>Lamparas por potencia</strong><br>Sin postes con lampara todavia";
+  } else {
+    let html = "<strong>Lamparas por potencia</strong>";
+    claves.forEach(function(clave) {
+      html += "<div style='display:flex; justify-content:space-between; margin-top:4px;'><span>" + clave + "</span><span style='font-weight:bold; margin-left:10px;'>" + conteo[clave] + "</span></div>";
+    });
+    panel.innerHTML = html;
+  }
+
+  panel.style.display = "block";
 });
 
 // Al cargar la pagina, pinta lo que ya estaba guardado
