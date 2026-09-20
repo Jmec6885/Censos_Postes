@@ -403,6 +403,7 @@
       <label>Filtrar por municipio</label>
       <select id="filtroMunicipioTotales"></select>
       <div id="resumenSeleccionTotales" style="margin-top:8px; font-size:13px; background:#ebf8ff; border-radius:6px; padding:8px;"></div>
+      <button id="btnMarcarTodasFechas" type="button" style="margin-top:8px; background:#4a5568;">Marcar todas las fechas</button>
       <div id="listaFechasTotales" style="margin-top:8px; font-size:13px;"></div>
     </div>
   </div>
@@ -1701,6 +1702,28 @@ document.getElementById('btnDescargarMapa').addEventListener('click', async func
 // ---- Ver puntos ya censados en Sheets (para cuando abres la app en otro navegador o celular) ----
 let capasSheet = [];
 
+function armarPopupSheet(p) {
+  let detalle = "<strong>" + (NOMBRES[p.tipo] || p.tipo) + "</strong>";
+  if (p.municipio) {
+    detalle += "<br>" + p.municipio;
+  }
+  if (p.tipo !== "clesa_sin_lampara") {
+    detalle += "<br>Lampara: " + (p.tipoLampara ? escaparXml(p.tipoLampara) : "-");
+    detalle += "<br>Potencia: " + (p.potencia ? escaparXml(p.potencia) : "-");
+  }
+  if (p.veinticuatroH === "Si") {
+    detalle += "<br>24H";
+  }
+  if (p.observaciones) {
+    detalle += "<br>Obs: " + escaparXml(p.observaciones);
+  }
+  if (p.fotoLink) {
+    detalle += "<br><a href='" + p.fotoLink + "' target='_blank'>Ver foto</a>";
+  }
+  detalle += "<br><span style='font-size:11px; color:#888;'>Ya en Sheets" + (p.fecha ? " (" + p.fecha + ")" : "") + "</span>";
+  return "<div style='font-size:12px; max-width:190px;'>" + detalle + "</div>";
+}
+
 document.getElementById('btnCargarDesdeSheet').addEventListener('click', async function() {
   const municipio = document.getElementById('municipio').value;
   if (!municipio) {
@@ -1740,7 +1763,7 @@ document.getElementById('btnCargarDesdeSheet').addEventListener('click', async f
         weight: 2,
         fillOpacity: 0.5,
         dashArray: "2,2"
-      }).addTo(mapa).bindPopup("Ya en Sheets: " + (NOMBRES[p.tipo] || p.tipo));
+      }).addTo(mapa).bindPopup(armarPopupSheet(p));
       capasSheet.push(marcador);
     });
 
@@ -1856,6 +1879,7 @@ function renderizarFiltroMunicipioTotales() {
 document.getElementById('filtroMunicipioTotales').addEventListener('change', renderizarFechasTotales);
 
 function renderizarFechasTotales() {
+  document.getElementById('btnMarcarTodasFechas').innerText = "Marcar todas las fechas";
   const municipioSel = document.getElementById('filtroMunicipioTotales').value;
   const filtrados = datosTotalesCache.filter(function(p) {
     return !municipioSel || p.municipio === municipioSel;
@@ -1898,6 +1922,14 @@ function renderizarFechasTotales() {
 
   recalcularSeleccionTotales();
 }
+
+document.getElementById('btnMarcarTodasFechas').addEventListener('click', function() {
+  const checks = document.querySelectorAll('.chkFechaTotales');
+  const hayAlgunaSinMarcar = Array.from(checks).some(function(c) { return !c.checked; });
+  checks.forEach(function(c) { c.checked = hayAlgunaSinMarcar; });
+  this.innerText = hayAlgunaSinMarcar ? "Quitar todas las fechas" : "Marcar todas las fechas";
+  recalcularSeleccionTotales();
+});
 
 function recalcularSeleccionTotales() {
   const checks = document.querySelectorAll('.chkFechaTotales:checked');
