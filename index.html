@@ -397,6 +397,9 @@
     <div id="estadoCargaSheet" style="font-size:12px; color:#444;"></div>
 
     <button id="btnExportarKml" style="margin-top:10px;">Exportar KML de mis postes</button>
+
+    <button id="btnTotalesPorDia" style="margin-top:10px;">Ver totales por dia (Sheets)</button>
+    <div id="panelTotalesPorDia" style="margin-top:8px; font-size:13px;"></div>
   </div>
 
 </div>
@@ -658,6 +661,7 @@ async function guardarPosteRapido() {
   const marcadorNuevo = L.marker([poste.lat, poste.lng], {
     icon: crearIconoGota(COLORES[poste.tipo])
   }).addTo(mapa).bindPopup(contenidoPopup(poste));
+  marcadorNuevo.idPoste = poste.id;
   capasMarcadores.push(marcadorNuevo);
 
   intentarSincronizarAutomatico(poste.id);
@@ -778,12 +782,154 @@ function guardarPostes(lista) {
 }
 
 function contenidoPopup(p) {
-  return "<div class='popupBotones'>" +
-    "<strong>" + NOMBRES[p.tipo] + "</strong><br>" +
-    (p.municipio || "") +
-    "<br><button style='background:#2b6cb0;' onclick='editarPosteDesdeMapa(" + p.id + ")'>Editar</button>" +
-    "<button style='background:#c53030;' onclick='borrarPoste(" + p.id + ")'>Eliminar</button>" +
+  let detalle = "<strong>" + NOMBRES[p.tipo] + "</strong>";
+  if (p.municipio) {
+    detalle += "<br>" + p.municipio;
+  }
+  if (p.tipo !== "clesa_sin_lampara") {
+    detalle += "<br>Lampara: " + (p.tipoLampara ? escaparXml(p.tipoLampara) : "-");
+    detalle += "<br>Potencia: " + (p.potencia ? escaparXml(p.potencia) : "-");
+  }
+  if (p.veinticuatroH) {
+    detalle += "<br>24H";
+  }
+  if (p.observaciones) {
+    detalle += "<br>Obs: " + escaparXml(p.observaciones);
+  }
+  detalle += "<br><span style='font-size:11px; color:#888;'>" + (p.sincronizado ? "Sincronizado" : "Pendiente") + "</span>";
+
+  return "<div class='popupBotones' style='font-size:12px; max-width:190px;'>" +
+    detalle +
+    "<br><button style='background:#2b6cb0; margin-top:6px;' onclick='editarEnGota(" + p.id + ")'>Editar</button>" +
+    "<button style='background:#c53030;' onclick='borrarPoste(" + p.id + ")'>Eliminar</button><br>" +
+    "<button style='background:#718096; margin-top:4px; font-size:11px;' onclick='editarPosteDesdeMapa(" + p.id + ")'>Editar foto / observaciones</button>" +
     "</div>";
+}
+
+function editarEnGota(id) {
+  const postes = obtenerPostes();
+  const p = postes.find(function(x) { return x.id === id; });
+  if (!p) {
+    return;
+  }
+  const marcador = capasMarcadores.find(function(m) { return m.idPoste === id; });
+  if (!marcador) {
+    return;
+  }
+  marcador.setPopupContent(popupEdicionInline(p));
+}
+
+function popupEdicionInline(p) {
+  let opcionesTipo = "";
+  Object.keys(NOMBRES).forEach(function(key) {
+    const sel = (key === p.tipo) ? " selected" : "";
+    opcionesTipo += "<option value='" + key + "'" + sel + ">" + NOMBRES[key] + "</option>";
+  });
+
+  const listaLampara = ["Led", "Fluorescente", "Mercurio", "Reflectores"];
+  const esLamparaConocida = listaLampara.indexOf(p.tipoLampara) !== -1;
+  let opcionesLampara = "";
+  listaLampara.forEach(function(o) {
+    const sel = (o === p.tipoLampara) ? " selected" : "";
+    opcionesLampara += "<option value='" + o + "'" + sel + ">" + o + "</option>";
+  });
+  const otroLampara = !!(p.tipoLampara && !esLamparaConocida);
+
+  const listaPotencia = ["40", "50", "65", "80", "100", "150", "175"];
+  const esPotenciaConocida = listaPotencia.indexOf(String(p.potencia)) !== -1;
+  let opcionesPotencia = "";
+  listaPotencia.forEach(function(o) {
+    const sel = (o === String(p.potencia)) ? " selected" : "";
+    opcionesPotencia += "<option value='" + o + "'" + sel + ">" + o + "</option>";
+  });
+  const otroPotencia = !!(p.potencia && !esPotenciaConocida);
+
+  const mostrarBloque = p.tipo !== "clesa_sin_lampara";
+
+  return "<div style='font-size:13px; width:190px;'>" +
+    "<strong>Editar poste</strong><br>" +
+    "<select id='edGotaTipo' onchange='cambioTipoEdicionGota(this.value)' style='margin-top:4px; width:100%;'>" +
+    opcionesTipo +
+    "</select>" +
+
+    "<div id='edGotaBloqueLampara' style='display:" + (mostrarBloque ? "block" : "none") + "; margin-top:6px;'>" +
+      "<strong>Tipo de lampara:</strong><br>" +
+      "<select id='edGotaLampara' onchange='cambioLamparaEdicionGota(this.value)' style='width:100%; margin-top:2px;'>" +
+      opcionesLampara +
+      "<option value='otro'" + (otroLampara ? " selected" : "") + ">Otro</option>" +
+      "</select>" +
+      "<input id='edGotaLamparaOtro' type='text' placeholder='Escribe el tipo' value='" + (otroLampara ? escaparXml(p.tipoLampara) : "") + "' style='display:" + (otroLampara ? "block" : "none") + "; margin-top:4px; width:100%; box-sizing:border-box;'>" +
+
+      "<strong style='display:block; margin-top:6px;'>Potencia:</strong>" +
+      "<select id='edGotaPotencia' onchange='cambioPotenciaEdicionGota(this.value)' style='width:100%; margin-top:2px;'>" +
+      opcionesPotencia +
+      "<option value='otro'" + (otroPotencia ? " selected" : "") + ">Otro</option>" +
+      "</select>" +
+      "<input id='edGotaPotenciaOtro' type='text' placeholder='Escribe la potencia' value='" + (otroPotencia ? escaparXml(p.potencia) : "") + "' style='display:" + (otroPotencia ? "block" : "none") + "; margin-top:4px; width:100%; box-sizing:border-box;'>" +
+    "</div>" +
+
+    "<button onclick='guardarEdicionGota(" + p.id + ")' style='margin-top:8px; background:#2f855a; color:white; border:none; border-radius:4px; padding:6px 10px; font-size:12px; width:100%;'>Guardar</button>" +
+    "<button onclick='cancelarEdicionGota()' style='margin-top:6px; background:#718096; color:white; border:none; border-radius:4px; padding:4px 8px; font-size:12px; width:100%;'>Cancelar</button>" +
+    "</div>";
+}
+
+function cambioTipoEdicionGota(valor) {
+  document.getElementById('edGotaBloqueLampara').style.display = (valor !== "clesa_sin_lampara") ? "block" : "none";
+}
+
+function cambioLamparaEdicionGota(valor) {
+  document.getElementById('edGotaLamparaOtro').style.display = (valor === "otro") ? "block" : "none";
+}
+
+function cambioPotenciaEdicionGota(valor) {
+  document.getElementById('edGotaPotenciaOtro').style.display = (valor === "otro") ? "block" : "none";
+}
+
+function guardarEdicionGota(id) {
+  const postes = obtenerPostes();
+  const idx = postes.findIndex(function(p) { return p.id === id; });
+  if (idx === -1) {
+    return;
+  }
+
+  const tipo = document.getElementById('edGotaTipo').value;
+  let tipoLampara = "";
+  let potencia = "";
+
+  if (tipo !== "clesa_sin_lampara") {
+    const selLampara = document.getElementById('edGotaLampara').value;
+    tipoLampara = (selLampara === "otro") ? document.getElementById('edGotaLamparaOtro').value.trim() : selLampara;
+    if (!tipoLampara) {
+      alert("Indica el tipo de lampara");
+      return;
+    }
+
+    const selPotencia = document.getElementById('edGotaPotencia').value;
+    potencia = (selPotencia === "otro") ? document.getElementById('edGotaPotenciaOtro').value.trim() : selPotencia;
+    if (!potencia) {
+      alert("Indica la potencia");
+      return;
+    }
+  }
+
+  postes[idx].tipo = tipo;
+  postes[idx].tipoLampara = tipoLampara;
+  postes[idx].potencia = potencia;
+  postes[idx].sincronizado = false;
+
+  guardarPostes(postes);
+  limpiarCapasMarcadores();
+  dibujarMarcadores();
+  actualizarContador();
+  actualizarEstadoSync();
+  dibujarListaPostes();
+
+  intentarSincronizarAutomatico(id, true);
+}
+
+function cancelarEdicionGota() {
+  limpiarCapasMarcadores();
+  dibujarMarcadores();
 }
 
 function crearIconoGota(color) {
@@ -801,12 +947,25 @@ function crearIconoGota(color) {
   });
 }
 
+let filtroPotenciaActivo = null;
+
+function claveePotencia(p) {
+  const valor = (p.potencia || "").trim();
+  return valor === "" ? "Sin dato" : valor;
+}
+
 function dibujarMarcadores() {
-  const postes = obtenerPostes();
+  let postes = obtenerPostes();
+  if (filtroPotenciaActivo) {
+    postes = postes.filter(function(p) {
+      return p.tipo !== "clesa_sin_lampara" && claveePotencia(p) === filtroPotenciaActivo;
+    });
+  }
   postes.forEach(function(p) {
     const marcador = L.marker([p.lat, p.lng], {
       icon: crearIconoGota(COLORES[p.tipo])
     }).addTo(mapa).bindPopup(contenidoPopup(p));
+    marcador.idPoste = p.id;
     capasMarcadores.push(marcador);
   });
 }
@@ -996,6 +1155,7 @@ document.getElementById('btnGuardar').addEventListener('click', async function()
   const marcadorNuevo = L.marker([poste.lat, poste.lng], {
     icon: crearIconoGota(COLORES[poste.tipo])
   }).addTo(mapa).bindPopup(contenidoPopup(poste));
+  marcadorNuevo.idPoste = poste.id;
   capasMarcadores.push(marcadorNuevo);
 
   actualizarContador();
@@ -1586,7 +1746,7 @@ document.getElementById('btnCargarDesdeSheet').addEventListener('click', async f
   }
 });
 
-// ---- Conteo de lamparas por potencia ----
+// ---- Conteo de lamparas por potencia, tocable para filtrar el mapa ----
 document.getElementById('btnPotencias').addEventListener('click', function() {
   const panel = document.getElementById('panelPotencias');
   if (panel.style.display === "block") {
@@ -1600,8 +1760,7 @@ document.getElementById('btnPotencias').addEventListener('click', function() {
     if (p.tipo === "clesa_sin_lampara") {
       return;
     }
-    const valor = (p.potencia || "").trim();
-    const clave = valor === "" ? "Sin dato" : valor;
+    const clave = claveePotencia(p);
     conteo[clave] = (conteo[clave] || 0) + 1;
   });
 
@@ -1616,14 +1775,90 @@ document.getElementById('btnPotencias').addEventListener('click', function() {
   if (claves.length === 0) {
     panel.innerHTML = "<strong>Lamparas por potencia</strong><br>Sin postes con lampara todavia";
   } else {
-    let html = "<strong>Lamparas por potencia</strong>";
+    let html = "<strong>Lamparas por potencia</strong><div style='font-size:10px; color:#888; margin-top:2px;'>Toca una para verla en el mapa</div>";
     claves.forEach(function(clave) {
-      html += "<div style='display:flex; justify-content:space-between; margin-top:4px;'><span>" + clave + "</span><span style='font-weight:bold; margin-left:10px;'>" + conteo[clave] + "</span></div>";
+      const activa = filtroPotenciaActivo === clave;
+      html += "<div onclick='filtrarPorPotenciaClick(\"" + clave + "\")' style='display:flex; justify-content:space-between; margin-top:6px; padding:4px 6px; border-radius:4px; cursor:pointer; background:" + (activa ? "#ebf8ff" : "transparent") + "; font-weight:" + (activa ? "bold" : "normal") + ";'>" +
+        "<span>" + clave + (activa ? " (viendo)" : "") + "</span><span style='margin-left:10px;'>" + conteo[clave] + "</span></div>";
     });
+    if (filtroPotenciaActivo) {
+      html += "<div onclick='filtrarPorPotenciaClick(null)' style='margin-top:8px; text-align:center; color:#c53030; font-size:11px; cursor:pointer;'>Quitar filtro</div>";
+    }
     panel.innerHTML = html;
   }
 
   panel.style.display = "block";
+});
+
+function filtrarPorPotenciaClick(clave) {
+  filtroPotenciaActivo = (filtroPotenciaActivo === clave) ? null : clave;
+  limpiarCapasMarcadores();
+  dibujarMarcadores();
+  document.getElementById('panelPotencias').style.display = "none";
+}
+
+// ---- Totales por dia, tomados directo de la hoja completa (no depende de lo local) ----
+document.getElementById('btnTotalesPorDia').addEventListener('click', async function() {
+  const panel = document.getElementById('panelTotalesPorDia');
+
+  if (panel.dataset.abierto === "1") {
+    panel.innerHTML = "";
+    panel.dataset.abierto = "0";
+    this.innerText = "Ver totales por dia (Sheets)";
+    return;
+  }
+
+  if (!navigator.onLine) {
+    alert("Necesitas señal para consultar los totales de la hoja");
+    return;
+  }
+
+  panel.innerHTML = "Consultando la hoja...";
+  panel.dataset.abierto = "1";
+  this.innerText = "Ocultar totales por dia";
+
+  try {
+    const respuesta = await fetch(APPS_SCRIPT_URL);
+    const datos = await respuesta.json();
+
+    if (!datos.ok) {
+      panel.innerHTML = "No se pudo consultar: " + datos.error;
+      return;
+    }
+
+    const porDia = {};
+    datos.postes.forEach(function(p) {
+      const fecha = p.fecha || "Sin fecha";
+      if (!porDia[fecha]) {
+        porDia[fecha] = { total: 0, tipos: {} };
+      }
+      porDia[fecha].total++;
+      const nombreTipo = NOMBRES[p.tipo] || p.tipo;
+      porDia[fecha].tipos[nombreTipo] = (porDia[fecha].tipos[nombreTipo] || 0) + 1;
+    });
+
+    const fechas = Object.keys(porDia).sort().reverse();
+
+    if (fechas.length === 0) {
+      panel.innerHTML = "Todavia no hay postes en la hoja";
+      return;
+    }
+
+    let html = "";
+    fechas.forEach(function(fecha) {
+      const info = porDia[fecha];
+      html += "<div class='tarjetaPoste' style='border-left-color:#2b6cb0;'>" +
+        "<strong>" + fecha + "</strong> — " + info.total + " postes<br>";
+      Object.keys(info.tipos).forEach(function(tipoNombre) {
+        html += "<span style='font-size:12px; color:#4a5568;'>" + tipoNombre + ": " + info.tipos[tipoNombre] + "</span><br>";
+      });
+      html += "</div>";
+    });
+
+    panel.innerHTML = html;
+  } catch (error) {
+    panel.innerHTML = "Error al consultar: " + error.message;
+  }
 });
 
 // Al cargar la pagina, pinta lo que ya estaba guardado
