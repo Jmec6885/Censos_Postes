@@ -399,7 +399,12 @@
     <button id="btnExportarKml" style="margin-top:10px;">Exportar KML de mis postes</button>
 
     <button id="btnTotalesPorDia" style="margin-top:10px;">Ver totales por dia (Sheets)</button>
-    <div id="panelTotalesPorDia" style="margin-top:8px; font-size:13px;"></div>
+    <div id="bloqueTotalesPorDia" style="display:none; margin-top:8px;">
+      <label>Filtrar por municipio</label>
+      <select id="filtroMunicipioTotales"></select>
+      <div id="resumenSeleccionTotales" style="margin-top:8px; font-size:13px; background:#ebf8ff; border-radius:6px; padding:8px;"></div>
+      <div id="listaFechasTotales" style="margin-top:8px; font-size:13px;"></div>
+    </div>
   </div>
 
 </div>
@@ -1797,13 +1802,15 @@ function filtrarPorPotenciaClick(clave) {
   document.getElementById('panelPotencias').style.display = "none";
 }
 
-// ---- Totales por dia, tomados directo de la hoja completa (no depende de lo local) ----
-document.getElementById('btnTotalesPorDia').addEventListener('click', async function() {
-  const panel = document.getElementById('panelTotalesPorDia');
+// ---- Totales por dia, con filtro de municipio y seleccion de una o varias fechas ----
+let datosTotalesCache = [];
+let porDiaTotalesActual = {};
 
-  if (panel.dataset.abierto === "1") {
-    panel.innerHTML = "";
-    panel.dataset.abierto = "0";
+document.getElementById('btnTotalesPorDia').addEventListener('click', async function() {
+  const bloque = document.getElementById('bloqueTotalesPorDia');
+
+  if (bloque.style.display === "block") {
+    bloque.style.display = "none";
     this.innerText = "Ver totales por dia (Sheets)";
     return;
   }
@@ -1813,53 +1820,130 @@ document.getElementById('btnTotalesPorDia').addEventListener('click', async func
     return;
   }
 
-  panel.innerHTML = "Consultando la hoja...";
-  panel.dataset.abierto = "1";
-  this.innerText = "Ocultar totales por dia";
+  this.innerText = "Consultando...";
 
   try {
     const respuesta = await fetch(APPS_SCRIPT_URL);
     const datos = await respuesta.json();
 
     if (!datos.ok) {
-      panel.innerHTML = "No se pudo consultar: " + datos.error;
+      alert("No se pudo consultar: " + datos.error);
+      this.innerText = "Ver totales por dia (Sheets)";
       return;
     }
 
-    const porDia = {};
-    datos.postes.forEach(function(p) {
-      const fecha = p.fecha || "Sin fecha";
-      if (!porDia[fecha]) {
-        porDia[fecha] = { total: 0, tipos: {} };
-      }
-      porDia[fecha].total++;
-      const nombreTipo = NOMBRES[p.tipo] || p.tipo;
-      porDia[fecha].tipos[nombreTipo] = (porDia[fecha].tipos[nombreTipo] || 0) + 1;
-    });
+    datosTotalesCache = datos.postes;
+    renderizarFiltroMunicipioTotales();
+    renderizarFechasTotales();
 
-    const fechas = Object.keys(porDia).sort().reverse();
+    bloque.style.display = "block";
+    this.innerText = "Ocultar totales por dia";
+  } catch (error) {
+    alert("Error al consultar: " + error.message);
+    this.innerText = "Ver totales por dia (Sheets)";
+  }
+});
 
-    if (fechas.length === 0) {
-      panel.innerHTML = "Todavia no hay postes en la hoja";
-      return;
+function renderizarFiltroMunicipioTotales() {
+  const municipios = Array.from(new Set(datosTotalesCache.map(function(p) { return p.municipio; }).filter(Boolean))).sort();
+  let html = "<option value=''>Todos los municipios</option>";
+  municipios.forEach(function(m) {
+    html += "<option value='" + m + "'>" + m + "</option>";
+  });
+  document.getElementById('filtroMunicipioTotales').innerHTML = html;
+}
+
+document.getElementById('filtroMunicipioTotales').addEventListener('change', renderizarFechasTotales);
+
+function renderizarFechasTotales() {
+  const municipioSel = document.getElementById('filtroMunicipioTotales').value;
+  const filtrados = datosTotalesCache.filter(function(p) {
+    return !municipioSel || p.municipio === municipioSel;
+  });
+
+  porDiaTotalesActual = {};
+  filtrados.forEach(function(p) {
+    const fecha = p.fecha || "Sin fecha";
+    if (!porDiaTotalesActual[fecha]) {
+      porDiaTotalesActual[fecha] = { total: 0, tipos: {}, potencias: {} };
     }
+    porDiaTotalesActual[fecha].total++;
+    const nombreTipo = NOMBRES[p.tipo] || p.tipo;
+    porDiaTotalesActual[fecha].tipos[nombreTipo] = (porDiaTotalesActual[fecha].tipos[nombreTipo] || 0) + 1;
+    if (p.tipo !== "clesa_sin_lampara") {
+      const claveP = (p.potencia || "").toString().trim() || "Sin dato";
+      porDiaTotalesActual[fecha].potencias[claveP] = (porDiaTotalesActual[fecha].potencias[claveP] || 0) + 1;
+    }
+  });
 
+  const fechas = Object.keys(porDiaTotalesActual).sort().reverse();
+  const contenedor = document.getElementById('listaFechasTotales');
+
+  if (fechas.length === 0) {
+    contenedor.innerHTML = "Sin postes para este municipio";
+  } else {
     let html = "";
     fechas.forEach(function(fecha) {
-      const info = porDia[fecha];
-      html += "<div class='tarjetaPoste' style='border-left-color:#2b6cb0;'>" +
+      const info = porDiaTotalesActual[fecha];
+      html += "<label class='tarjetaPoste' style='display:block; border-left-color:#2b6cb0;'>" +
+        "<input type='checkbox' class='chkFechaTotales' value='" + fecha + "' onchange='recalcularSeleccionTotales()'> " +
         "<strong>" + fecha + "</strong> — " + info.total + " postes<br>";
       Object.keys(info.tipos).forEach(function(tipoNombre) {
         html += "<span style='font-size:12px; color:#4a5568;'>" + tipoNombre + ": " + info.tipos[tipoNombre] + "</span><br>";
       });
-      html += "</div>";
+      html += "</label>";
     });
-
-    panel.innerHTML = html;
-  } catch (error) {
-    panel.innerHTML = "Error al consultar: " + error.message;
+    contenedor.innerHTML = html;
   }
-});
+
+  recalcularSeleccionTotales();
+}
+
+function recalcularSeleccionTotales() {
+  const checks = document.querySelectorAll('.chkFechaTotales:checked');
+  const resumen = document.getElementById('resumenSeleccionTotales');
+
+  if (checks.length === 0) {
+    resumen.innerHTML = "<span style='color:#666;'>Marca una o varias fechas para ver el total combinado</span>";
+    return;
+  }
+
+  let totalGeneral = 0;
+  const tiposComb = {};
+  const potenciasComb = {};
+
+  checks.forEach(function(chk) {
+    const info = porDiaTotalesActual[chk.value];
+    if (!info) {
+      return;
+    }
+    totalGeneral += info.total;
+    Object.keys(info.tipos).forEach(function(t) {
+      tiposComb[t] = (tiposComb[t] || 0) + info.tipos[t];
+    });
+    Object.keys(info.potencias).forEach(function(p) {
+      potenciasComb[p] = (potenciasComb[p] || 0) + info.potencias[p];
+    });
+  });
+
+  let html = "<strong>Total combinado: " + totalGeneral + " postes</strong><br>";
+  Object.keys(tiposComb).forEach(function(t) {
+    html += t + ": " + tiposComb[t] + "<br>";
+  });
+
+  const clavesPotencia = Object.keys(potenciasComb);
+  if (clavesPotencia.length > 0) {
+    html += "<div style='margin-top:6px; font-weight:bold;'>Por potencia:</div>";
+    clavesPotencia.sort(function(a, b) {
+      const na = parseFloat(a), nb = parseFloat(b);
+      return (isNaN(na) || isNaN(nb)) ? a.localeCompare(b) : na - nb;
+    }).forEach(function(p) {
+      html += p + ": " + potenciasComb[p] + "<br>";
+    });
+  }
+
+  resumen.innerHTML = html;
+}
 
 // Al cargar la pagina, pinta lo que ya estaba guardado
 dibujarMarcadores();
