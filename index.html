@@ -1576,6 +1576,45 @@ function escaparXml(texto) {
     .replace(/>/g, "&gt;");
 }
 
+function construirKml(lista, nombreDocumento) {
+  let placemarks = "";
+  lista.forEach(function(p) {
+    const descripcion =
+      "Municipio: " + escaparXml(p.municipio) + "\n" +
+      "Tipo: " + escaparXml(NOMBRES[p.tipo] || p.tipo) + "\n" +
+      "Tipo de lampara: " + escaparXml(p.tipoLampara) + "\n" +
+      "Potencia: " + escaparXml(p.potencia) + "\n" +
+      "24H: " + (p.veinticuatroH === true || p.veinticuatroH === "Si" ? "Si" : "No") + "\n" +
+      "Observaciones: " + escaparXml(p.observaciones) + "\n" +
+      "Fecha: " + escaparXml(p.fecha) + " " + escaparXml(p.hora);
+
+    placemarks +=
+      "<Placemark>" +
+      "<name>" + escaparXml(NOMBRES[p.tipo] || p.tipo) + "</name>" +
+      "<description><![CDATA[" + descripcion + "]]></description>" +
+      "<Point><coordinates>" + p.lng + "," + p.lat + ",0</coordinates></Point>" +
+      "</Placemark>";
+  });
+
+  return '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' +
+    "<name>" + escaparXml(nombreDocumento) + "</name>" +
+    placemarks +
+    "</Document></kml>";
+}
+
+function descargarKml(kml, nombreArchivo) {
+  const blob = new Blob([kml], { type: "application/vnd.google-earth.kml+xml" });
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  URL.revokeObjectURL(url);
+}
+
 document.getElementById('btnExportarKml').addEventListener('click', function() {
   const postes = obtenerPostes();
 
@@ -1584,44 +1623,27 @@ document.getElementById('btnExportarKml').addEventListener('click', function() {
     return;
   }
 
-  let placemarks = "";
-  postes.forEach(function(p) {
-    const descripcion =
-      "Municipio: " + escaparXml(p.municipio) + "\n" +
-      "Tipo: " + escaparXml(NOMBRES[p.tipo]) + "\n" +
-      "Tipo de lampara: " + escaparXml(p.tipoLampara) + "\n" +
-      "Potencia: " + escaparXml(p.potencia) + "\n" +
-      "24H: " + (p.veinticuatroH ? "Si" : "No") + "\n" +
-      "Observaciones: " + escaparXml(p.observaciones) + "\n" +
-      "Fecha: " + escaparXml(p.fecha) + " " + escaparXml(p.hora) + "\n" +
-      "Sincronizado: " + (p.sincronizado ? "Si" : "No");
+  const kml = construirKml(postes, "Censo de Postes");
+  const fecha = new Date().toISOString().slice(0, 10);
+  descargarKml(kml, "censo_postes_" + fecha + ".kml");
+});
 
-    placemarks +=
-      "<Placemark>" +
-      "<name>" + escaparXml(NOMBRES[p.tipo]) + "</name>" +
-      "<description><![CDATA[" + descripcion + "]]></description>" +
-      "<Point><coordinates>" + p.lng + "," + p.lat + ",0</coordinates></Point>" +
-      "</Placemark>";
+function descargarKmlDeFecha(fecha) {
+  const municipioSel = document.getElementById('filtroMunicipioTotales').value;
+  const filtrados = datosTotalesCache.filter(function(p) {
+    return (!municipioSel || p.municipio === municipioSel) && p.fecha === fecha;
   });
 
-  const kml =
-    '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' +
-    "<name>Censo de Postes</name>" +
-    placemarks +
-    "</Document></kml>";
+  if (filtrados.length === 0) {
+    alert("No hay puntos para esa fecha");
+    return;
+  }
 
-  const blob = new Blob([kml], { type: "application/vnd.google-earth.kml+xml" });
-  const url = URL.createObjectURL(blob);
-  const enlace = document.createElement('a');
-  enlace.href = url;
-  const fecha = new Date().toISOString().slice(0, 10);
-  enlace.download = "censo_postes_" + fecha + ".kml";
-  document.body.appendChild(enlace);
-  enlace.click();
-  document.body.removeChild(enlace);
-  URL.revokeObjectURL(url);
-});
+  const nombreMunicipio = municipioSel || "todos los municipios";
+  const kml = construirKml(filtrados, "Censo " + nombreMunicipio + " " + fecha);
+  const nombreArchivo = "censo_" + (municipioSel || "todos") + "_" + fecha.replace(/-/g, "") + ".kml";
+  descargarKml(kml, nombreArchivo);
+}
 
 // ---- Descargar el mapa de la zona visible para usarlo sin señal ----
 function long2tile(lon, zoom) {
@@ -1900,7 +1922,9 @@ function renderizarFechasTotales() {
     }
   });
 
-  const fechas = Object.keys(porDiaTotalesActual).sort().reverse();
+  const fechas = Object.keys(porDiaTotalesActual).sort(function(a, b) {
+    return parsearFechaDMY(b) - parsearFechaDMY(a);
+  });
   const contenedor = document.getElementById('listaFechasTotales');
 
   if (fechas.length === 0) {
@@ -1909,18 +1933,29 @@ function renderizarFechasTotales() {
     let html = "";
     fechas.forEach(function(fecha) {
       const info = porDiaTotalesActual[fecha];
-      html += "<label class='tarjetaPoste' style='display:block; border-left-color:#2b6cb0;'>" +
+      html += "<div class='tarjetaPoste' style='border-left-color:#2b6cb0;'>" +
+        "<label style='display:block;'>" +
         "<input type='checkbox' class='chkFechaTotales' value='" + fecha + "' onchange='recalcularSeleccionTotales()'> " +
         "<strong>" + fecha + "</strong> — " + info.total + " postes<br>";
       Object.keys(info.tipos).forEach(function(tipoNombre) {
         html += "<span style='font-size:12px; color:#4a5568;'>" + tipoNombre + ": " + info.tipos[tipoNombre] + "</span><br>";
       });
-      html += "</label>";
+      html += "</label>" +
+        "<button onclick='descargarKmlDeFecha(\"" + fecha + "\")' style='margin-top:6px; width:auto; padding:6px 10px; background:#1a7f5a; font-size:12px;'>Descargar KML de este dia</button>" +
+        "</div>";
     });
     contenedor.innerHTML = html;
   }
 
   recalcularSeleccionTotales();
+}
+
+function parsearFechaDMY(texto) {
+  const partes = (texto || "").split("-");
+  if (partes.length !== 3) {
+    return 0;
+  }
+  return new Date(partes[2], partes[1] - 1, partes[0]).getTime();
 }
 
 document.getElementById('btnMarcarTodasFechas').addEventListener('click', function() {
