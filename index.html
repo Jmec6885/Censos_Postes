@@ -7,6 +7,10 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
+  :root {
+    --color-azul: #3b54d3;
+    --color-verde: #3ac99c;
+  }
   * {
     box-sizing: border-box;
   }
@@ -16,8 +20,37 @@
     padding: 0;
     background: #eef1f4;
   }
+  #headerApp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    padding: 8px 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    position: relative;
+    z-index: 600;
+  }
+  #headerApp img {
+    height: 34px;
+    width: auto;
+  }
+  #headerApp .tituloApp {
+    font-size: 1.05rem;
+    font-weight: 900;
+    background: linear-gradient(90deg, var(--color-azul), var(--color-verde));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.1;
+  }
+  #headerApp .creditoApp {
+    font-size: 0.68rem;
+    color: #718096;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
   #mapa {
-    height: 62vh;
+    height: 58vh;
     width: 100%;
   }
   #contador {
@@ -92,10 +125,11 @@
     color: white;
   }
   #btnGps {
-    background: #2b6cb0;
+    background: linear-gradient(135deg, var(--color-azul), var(--color-verde));
   }
   #btnUsarCentro {
-    background: #805ad5;
+    background: linear-gradient(135deg, var(--color-azul), var(--color-verde));
+    opacity: 0.9;
   }
   #btnToggleHerramientas {
     margin-top: 10px;
@@ -141,7 +175,7 @@
     font-size: 14px;
   }
   #btnGuardar {
-    background: #2f855a;
+    background: linear-gradient(135deg, var(--color-azul), var(--color-verde));
     font-weight: bold;
     font-size: 15px;
   }
@@ -209,6 +243,14 @@
 </head>
 
 <body>
+
+<div id="headerApp">
+  <img src="https://cdnimg.bnamericas.com/HFvkiBpeoLTFyPBTjytdbdohtBDrWQsnxgYaUwIlxAEFZVYKsYrwygPFBPYYlShO.png" alt="Logo CLESA">
+  <div>
+    <div class="tituloApp">Censo de Postes</div>
+    <div class="creditoApp">By. Jose Meneses</div>
+  </div>
+</div>
 
 <div id="contenedorMapa" style="position:relative;">
   <div id="mapa"></div>
