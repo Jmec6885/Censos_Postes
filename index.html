@@ -305,7 +305,7 @@
     padding:10px 12px;
     font-size:12px;
     box-shadow:0 1px 4px rgba(0,0,0,0.3);
-    max-width:150px;
+    max-width:200px;
   "></div>
 </div>
 
@@ -1025,7 +1025,15 @@ function limpiarCapasMarcadores() {
   capasMarcadores = [];
 }
 
+let modoContador = "local";
+let conteoSheetsCache = null;
+
 function actualizarContador() {
+  if (modoContador === "sheets") {
+    renderContadorSheets();
+    return;
+  }
+
   const postes = obtenerPostes();
   const conteo = { clesa_sin_lampara: 0, clesa_con_lampara: 0, fuera_norma: 0, privado: 0 };
   postes.forEach(function(p) { conteo[p.tipo]++; });
@@ -1040,6 +1048,72 @@ function actualizarContador() {
       NOMBRES[tipo] + ": " + conteo[tipo];
     contenedor.appendChild(item);
   });
+
+  const btnReal = document.createElement('div');
+  btnReal.style.cssText = "cursor:pointer; color:#3182ce; font-weight:bold; text-decoration:underline; font-size:10px;";
+  btnReal.innerText = "Ver real (Sheets)";
+  btnReal.onclick = function() {
+    if (!navigator.onLine) {
+      alert("Necesitas señal para consultar el total real");
+      return;
+    }
+    modoContador = "sheets";
+    actualizarContador();
+  };
+  contenedor.appendChild(btnReal);
+}
+
+async function renderContadorSheets() {
+  const contenedor = document.getElementById('contador');
+  const municipioSel = document.getElementById('municipio').value;
+
+  if (navigator.onLine) {
+    contenedor.innerHTML = "<div style='font-size:11px;'>Consultando Sheets...</div>";
+    try {
+      const url = municipioSel ? (APPS_SCRIPT_URL + "?municipio=" + encodeURIComponent(municipioSel)) : APPS_SCRIPT_URL;
+      const respuesta = await fetch(url);
+      const datos = await respuesta.json();
+      if (datos.ok) {
+        const conteo = { clesa_sin_lampara: 0, clesa_con_lampara: 0, fuera_norma: 0, privado: 0 };
+        datos.postes.forEach(function(p) {
+          if (conteo[p.tipo] !== undefined) {
+            conteo[p.tipo]++;
+          }
+        });
+        conteoSheetsCache = conteo;
+      }
+    } catch (error) {
+      console.log("No se pudo consultar Sheets para el contador: " + error.message);
+    }
+  }
+
+  contenedor.innerHTML = "";
+  if (!conteoSheetsCache) {
+    contenedor.innerHTML = "<div style='font-size:11px;'>Sin datos aun (necesitas señal)</div>";
+  } else {
+    Object.keys(NOMBRES).forEach(function(tipo) {
+      const item = document.createElement('div');
+      item.className = "contador-item";
+      item.innerHTML =
+        '<span class="bolita" style="background:' + COLORES[tipo] + '"></span>' +
+        NOMBRES[tipo] + ": " + conteoSheetsCache[tipo];
+      contenedor.appendChild(item);
+    });
+  }
+
+  const info = document.createElement('div');
+  info.style.cssText = "font-size:10px; color:#888;";
+  info.innerText = "Real Sheets: " + (municipioSel || "todos los municipios");
+  contenedor.appendChild(info);
+
+  const btnLocal = document.createElement('div');
+  btnLocal.style.cssText = "cursor:pointer; color:#c53030; font-weight:bold; text-decoration:underline; font-size:10px;";
+  btnLocal.innerText = "Volver a local";
+  btnLocal.onclick = function() {
+    modoContador = "local";
+    actualizarContador();
+  };
+  contenedor.appendChild(btnLocal);
 }
 
 function leerArchivoComoBase64(archivo) {
@@ -1838,14 +1912,38 @@ document.getElementById('btnCargarDesdeSheet').addEventListener('click', async f
   }
 });
 
-// ---- Conteo de lamparas por potencia, tocable para filtrar el mapa ----
+// ---- Conteo de lamparas por potencia, con opcion de ver el total real desde Sheets ----
+let modoPotencia = "local";
+
 document.getElementById('btnPotencias').addEventListener('click', function() {
   const panel = document.getElementById('panelPotencias');
   if (panel.style.display === "block") {
     panel.style.display = "none";
     return;
   }
+  panel.style.display = "block";
+  renderPanelPotencias();
+});
 
+function encabezadoModoPotencia() {
+  return "<div style='display:flex; gap:6px; margin-bottom:6px;'>" +
+    "<div onclick='cambiarModoPotencia(\"local\")' style='flex:1; text-align:center; padding:4px; border-radius:4px; cursor:pointer; font-size:11px; background:" + (modoPotencia === "local" ? "#3182ce" : "#e2e8f0") + "; color:" + (modoPotencia === "local" ? "white" : "#333") + ";'>Local</div>" +
+    "<div onclick='cambiarModoPotencia(\"sheets\")' style='flex:1; text-align:center; padding:4px; border-radius:4px; cursor:pointer; font-size:11px; background:" + (modoPotencia === "sheets" ? "#3182ce" : "#e2e8f0") + "; color:" + (modoPotencia === "sheets" ? "white" : "#333") + ";'>Real (Sheets)</div>" +
+    "</div>";
+}
+
+function cambiarModoPotencia(modo) {
+  modoPotencia = modo;
+  renderPanelPotencias();
+}
+
+function renderPanelPotencias() {
+  if (modoPotencia === "sheets") {
+    renderPanelPotenciasSheets();
+    return;
+  }
+
+  const panel = document.getElementById('panelPotencias');
   const postes = obtenerPostes();
   const conteo = {};
   postes.forEach(function(p) {
@@ -1864,10 +1962,12 @@ document.getElementById('btnPotencias').addEventListener('click', function() {
     return na - nb;
   });
 
+  let html = encabezadoModoPotencia() + "<strong>Lamparas por potencia (local)</strong>";
+
   if (claves.length === 0) {
-    panel.innerHTML = "<strong>Lamparas por potencia</strong><br>Sin postes con lampara todavia";
+    html += "<br>Sin postes con lampara todavia";
   } else {
-    let html = "<strong>Lamparas por potencia</strong><div style='font-size:10px; color:#888; margin-top:2px;'>Toca una para verla en el mapa</div>";
+    html += "<div style='font-size:10px; color:#888; margin-top:2px;'>Toca una para verla en el mapa</div>";
     claves.forEach(function(clave) {
       const activa = filtroPotenciaActivo === clave;
       html += "<div onclick='filtrarPorPotenciaClick(\"" + clave + "\")' style='display:flex; justify-content:space-between; margin-top:6px; padding:4px 6px; border-radius:4px; cursor:pointer; background:" + (activa ? "#ebf8ff" : "transparent") + "; font-weight:" + (activa ? "bold" : "normal") + ";'>" +
@@ -1876,11 +1976,67 @@ document.getElementById('btnPotencias').addEventListener('click', function() {
     if (filtroPotenciaActivo) {
       html += "<div onclick='filtrarPorPotenciaClick(null)' style='margin-top:8px; text-align:center; color:#c53030; font-size:11px; cursor:pointer;'>Quitar filtro</div>";
     }
-    panel.innerHTML = html;
   }
 
-  panel.style.display = "block";
-});
+  panel.innerHTML = html;
+}
+
+async function renderPanelPotenciasSheets() {
+  const panel = document.getElementById('panelPotencias');
+  const municipioSel = document.getElementById('municipio').value;
+
+  panel.innerHTML = encabezadoModoPotencia() + "<div style='font-size:12px;'>Consultando Sheets...</div>";
+
+  if (!navigator.onLine) {
+    panel.innerHTML = encabezadoModoPotencia() + "<div style='font-size:12px; color:#c53030;'>Necesitas señal para el total real</div>";
+    return;
+  }
+
+  try {
+    const url = municipioSel ? (APPS_SCRIPT_URL + "?municipio=" + encodeURIComponent(municipioSel)) : APPS_SCRIPT_URL;
+    const respuesta = await fetch(url);
+    const datos = await respuesta.json();
+
+    if (!datos.ok) {
+      panel.innerHTML = encabezadoModoPotencia() + "<div style='font-size:12px; color:#c53030;'>Error: " + datos.error + "</div>";
+      return;
+    }
+
+    const conteo = {};
+    datos.postes.forEach(function(p) {
+      if (p.tipo === "clesa_sin_lampara") {
+        return;
+      }
+      const clave = (p.potencia || "").toString().trim() || "Sin dato";
+      conteo[clave] = (conteo[clave] || 0) + 1;
+    });
+
+    const claves = Object.keys(conteo).sort(function(a, b) {
+      const na = parseFloat(a), nb = parseFloat(b);
+      if (isNaN(na) || isNaN(nb)) {
+        return a.localeCompare(b);
+      }
+      return na - nb;
+    });
+
+    let html = encabezadoModoPotencia() +
+      "<strong>Lamparas por potencia (real)</strong>" +
+      "<div style='font-size:10px; color:#888; margin-top:2px;'>" + (municipioSel || "Todos los municipios") + " — no filtra el mapa</div>";
+
+    if (claves.length === 0) {
+      html += "<br>Sin postes con lampara en Sheets";
+    } else {
+      claves.forEach(function(clave) {
+        html += "<div style='display:flex; justify-content:space-between; margin-top:6px; padding:4px 6px;'>" +
+          "<span>" + clave + "</span><span style='margin-left:10px;'>" + conteo[clave] + "</span></div>";
+      });
+    }
+
+    panel.innerHTML = html;
+  } catch (error) {
+    panel.innerHTML = encabezadoModoPotencia() + "<div style='font-size:12px; color:#c53030;'>Error: " + error.message + "</div>";
+  }
+}
 
 function filtrarPorPotenciaClick(clave) {
   filtroPotenciaActivo = (filtroPotenciaActivo === clave) ? null : clave;
