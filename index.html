@@ -997,6 +997,13 @@ function crearIconoGota(color) {
 
 let filtroPotenciaActivo = null;
 
+function hoyDMY() {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return dd + "-" + mm + "-" + d.getFullYear();
+}
+
 function claveePotencia(p) {
   const valor = (p.potencia || "").trim();
   return valor === "" ? "Sin dato" : valor;
@@ -1070,7 +1077,10 @@ async function renderContadorSheets() {
   if (navigator.onLine) {
     contenedor.innerHTML = "<div style='font-size:11px;'>Consultando Sheets...</div>";
     try {
-      const url = municipioSel ? (APPS_SCRIPT_URL + "?municipio=" + encodeURIComponent(municipioSel)) : APPS_SCRIPT_URL;
+      let url = APPS_SCRIPT_URL + "?fecha=" + encodeURIComponent(hoyDMY());
+      if (municipioSel) {
+        url += "&municipio=" + encodeURIComponent(municipioSel);
+      }
       const respuesta = await fetch(url);
       const datos = await respuesta.json();
       if (datos.ok) {
@@ -1103,7 +1113,7 @@ async function renderContadorSheets() {
 
   const info = document.createElement('div');
   info.style.cssText = "font-size:10px; color:#888;";
-  info.innerText = "Real Sheets: " + (municipioSel || "todos los municipios");
+  info.innerText = "Real Sheets HOY: " + (municipioSel || "todos los municipios");
   contenedor.appendChild(info);
 
   const btnLocal = document.createElement('div');
@@ -1993,7 +2003,10 @@ async function renderPanelPotenciasSheets() {
   }
 
   try {
-    const url = municipioSel ? (APPS_SCRIPT_URL + "?municipio=" + encodeURIComponent(municipioSel)) : APPS_SCRIPT_URL;
+    let url = APPS_SCRIPT_URL + "?fecha=" + encodeURIComponent(hoyDMY());
+    if (municipioSel) {
+      url += "&municipio=" + encodeURIComponent(municipioSel);
+    }
     const respuesta = await fetch(url);
     const datos = await respuesta.json();
 
@@ -2020,7 +2033,7 @@ async function renderPanelPotenciasSheets() {
     });
 
     let html = encabezadoModoPotencia() +
-      "<strong>Lamparas por potencia (real)</strong>" +
+      "<strong>Lamparas por potencia (real, HOY)</strong>" +
       "<div style='font-size:10px; color:#888; margin-top:2px;'>" + (municipioSel || "Todos los municipios") + " — no filtra el mapa</div>";
 
     if (claves.length === 0) {
