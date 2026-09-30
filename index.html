@@ -442,11 +442,29 @@
 
     <button id="btnTotalesPorDia" style="margin-top:10px;">Ver totales por dia (Sheets)</button>
     <div id="bloqueTotalesPorDia" style="display:none; margin-top:8px;">
-      <label>Filtrar por municipio</label>
-      <select id="filtroMunicipioTotales"></select>
-      <div id="resumenSeleccionTotales" style="margin-top:8px; font-size:13px; background:#ebf8ff; border-radius:6px; padding:8px;"></div>
-      <button id="btnMarcarTodasFechas" type="button" style="margin-top:8px; background:#4a5568;">Marcar todas las fechas</button>
-      <div id="listaFechasTotales" style="margin-top:8px; font-size:13px;"></div>
+
+      <div id="filtroPrevioTotales">
+        <label>Municipio (obligatorio, asi carga rapido)</label>
+        <select id="filtroMunicipioPrevio"></select>
+
+        <label>Fecha especifica (opcional)</label>
+        <input type="date" id="filtroFechaPrevia">
+
+        <button id="btnConsultarTotalesMunicipio" style="margin-top:8px;">Consultar</button>
+        <div style="font-size:11px; color:#666; margin-top:6px;">Elige un municipio (y opcionalmente una fecha) para traer solo eso y que cargue rapido en el celular.</div>
+        <button id="btnConsultarTodosMunicipios" style="margin-top:6px; background:#a0aec0; font-size:12px;">Consultar todos los municipios (lento, no recomendado en datos moviles)</button>
+      </div>
+
+      <div id="resultadoTotalesPorDia" style="display:none; margin-top:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong id="tituloConsultaActual" style="font-size:13px;"></strong>
+          <span onclick="volverAFiltroTotales()" style="font-size:12px; color:#3182ce; cursor:pointer; text-decoration:underline;">Cambiar filtro</span>
+        </div>
+        <div id="resumenSeleccionTotales" style="margin-top:8px; font-size:13px; background:#ebf8ff; border-radius:6px; padding:8px;"></div>
+        <button id="btnMarcarTodasFechas" type="button" style="margin-top:8px; background:#4a5568;">Marcar todas las fechas</button>
+        <div id="listaFechasTotales" style="margin-top:8px; font-size:13px;"></div>
+      </div>
+
     </div>
   </div>
 
@@ -1755,9 +1773,8 @@ document.getElementById('btnExportarKml').addEventListener('click', function() {
 });
 
 function descargarKmlDeFecha(fecha) {
-  const municipioSel = document.getElementById('filtroMunicipioTotales').value;
   const filtrados = datosTotalesCache.filter(function(p) {
-    return (!municipioSel || p.municipio === municipioSel) && p.fecha === fecha;
+    return p.fecha === fecha;
   });
 
   if (filtrados.length === 0) {
@@ -1765,9 +1782,9 @@ function descargarKmlDeFecha(fecha) {
     return;
   }
 
-  const nombreMunicipio = municipioSel || "todos los municipios";
+  const nombreMunicipio = municipioConsultaActual || "todos los municipios";
   const kml = construirKml(filtrados, "Censo " + nombreMunicipio + " " + fecha);
-  const nombreArchivo = "censo_" + (municipioSel || "todos") + "_" + fecha.replace(/-/g, "") + ".kml";
+  const nombreArchivo = "censo_" + (municipioConsultaActual || "todos") + "_" + fecha.replace(/-/g, "") + ".kml";
   descargarKml(kml, nombreArchivo);
 }
 
@@ -2058,11 +2075,12 @@ function filtrarPorPotenciaClick(clave) {
   document.getElementById('panelPotencias').style.display = "none";
 }
 
-// ---- Totales por dia, con filtro de municipio y seleccion de una o varias fechas ----
+// ---- Totales por dia: primero se elige municipio (y fecha opcional), luego se consulta ya filtrado ----
 let datosTotalesCache = [];
 let porDiaTotalesActual = {};
+let municipioConsultaActual = "";
 
-document.getElementById('btnTotalesPorDia').addEventListener('click', async function() {
+document.getElementById('btnTotalesPorDia').addEventListener('click', function() {
   const bloque = document.getElementById('bloqueTotalesPorDia');
 
   if (bloque.style.display === "block") {
@@ -2071,55 +2089,103 @@ document.getElementById('btnTotalesPorDia').addEventListener('click', async func
     return;
   }
 
+  poblarFiltroMunicipioPrevio();
+  document.getElementById('filtroPrevioTotales').style.display = "block";
+  document.getElementById('resultadoTotalesPorDia').style.display = "none";
+
+  bloque.style.display = "block";
+  this.innerText = "Ocultar totales por dia";
+});
+
+function poblarFiltroMunicipioPrevio() {
+  const select = document.getElementById('filtroMunicipioPrevio');
+  if (select.options.length > 0) {
+    return;
+  }
+  select.innerHTML = document.getElementById('municipio').innerHTML.replace("Seleccione", "Elige un municipio");
+}
+
+function volverAFiltroTotales() {
+  document.getElementById('filtroPrevioTotales').style.display = "block";
+  document.getElementById('resultadoTotalesPorDia').style.display = "none";
+}
+
+document.getElementById('btnConsultarTotalesMunicipio').addEventListener('click', function() {
+  const municipioSel = document.getElementById('filtroMunicipioPrevio').value;
+  if (!municipioSel) {
+    alert("Elige un municipio primero");
+    return;
+  }
+  consultarTotales(municipioSel);
+});
+
+document.getElementById('btnConsultarTodosMunicipios').addEventListener('click', function() {
+  const continuar = confirm("Esto trae TODOS los municipios juntos, puede tardar mucho o fallar en datos moviles. Continuar?");
+  if (!continuar) {
+    return;
+  }
+  consultarTotales("");
+});
+
+async function consultarTotales(municipioSel, fechaSel) {
   if (!navigator.onLine) {
     alert("Necesitas señal para consultar los totales de la hoja");
     return;
   }
 
-  this.innerText = "Consultando...";
+  const fechaInput = document.getElementById('filtroFechaPrevia').value;
+  let fechaParaConsulta = fechaSel;
+  if (fechaParaConsulta === undefined) {
+    fechaParaConsulta = fechaInput ? convertirFechaInputADMY(fechaInput) : "";
+  }
+
+  const botonesFiltro = document.getElementById('filtroPrevioTotales');
+  botonesFiltro.style.opacity = "0.6";
 
   try {
-    const respuesta = await fetch(APPS_SCRIPT_URL);
+    let url = APPS_SCRIPT_URL + "?municipio=" + encodeURIComponent(municipioSel);
+    if (fechaParaConsulta) {
+      url += "&fecha=" + encodeURIComponent(fechaParaConsulta);
+    }
+
+    const respuesta = await fetch(url);
     const datos = await respuesta.json();
 
     if (!datos.ok) {
       alert("No se pudo consultar: " + datos.error);
-      this.innerText = "Ver totales por dia (Sheets)";
       return;
     }
 
     datosTotalesCache = datos.postes;
-    renderizarFiltroMunicipioTotales();
+    municipioConsultaActual = municipioSel;
+
+    document.getElementById('tituloConsultaActual').innerText =
+      (municipioSel || "Todos los municipios") + (fechaParaConsulta ? " — " + fechaParaConsulta : "");
+
     renderizarFechasTotales();
 
-    bloque.style.display = "block";
-    this.innerText = "Ocultar totales por dia";
+    document.getElementById('filtroPrevioTotales').style.display = "none";
+    document.getElementById('resultadoTotalesPorDia').style.display = "block";
   } catch (error) {
     alert("Error al consultar: " + error.message);
-    this.innerText = "Ver totales por dia (Sheets)";
+  } finally {
+    botonesFiltro.style.opacity = "1";
   }
-});
-
-function renderizarFiltroMunicipioTotales() {
-  const municipios = Array.from(new Set(datosTotalesCache.map(function(p) { return p.municipio; }).filter(Boolean))).sort();
-  let html = "<option value=''>Todos los municipios</option>";
-  municipios.forEach(function(m) {
-    html += "<option value='" + m + "'>" + m + "</option>";
-  });
-  document.getElementById('filtroMunicipioTotales').innerHTML = html;
 }
 
-document.getElementById('filtroMunicipioTotales').addEventListener('change', renderizarFechasTotales);
+function convertirFechaInputADMY(valorInput) {
+  const partes = valorInput.split("-");
+  if (partes.length !== 3) {
+    return "";
+  }
+  return partes[2] + "-" + partes[1] + "-" + partes[0];
+}
 
 function renderizarFechasTotales() {
   document.getElementById('btnMarcarTodasFechas').innerText = "Marcar todas las fechas";
-  const municipioSel = document.getElementById('filtroMunicipioTotales').value;
-  const filtrados = datosTotalesCache.filter(function(p) {
-    return !municipioSel || p.municipio === municipioSel;
-  });
 
   porDiaTotalesActual = {};
-  filtrados.forEach(function(p) {
+  datosTotalesCache.forEach(function(p) {
     const fecha = p.fecha || "Sin fecha";
     if (!porDiaTotalesActual[fecha]) {
       porDiaTotalesActual[fecha] = { total: 0, tipos: {}, potencias: {} };
