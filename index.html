@@ -2079,6 +2079,7 @@ function filtrarPorPotenciaClick(clave) {
 let datosTotalesCache = [];
 let porDiaTotalesActual = {};
 let municipioConsultaActual = "";
+let fechaConsultaActual = "";
 
 document.getElementById('btnTotalesPorDia').addEventListener('click', function() {
   const bloque = document.getElementById('bloqueTotalesPorDia');
@@ -2158,6 +2159,7 @@ async function consultarTotales(municipioSel, fechaSel) {
 
     datosTotalesCache = datos.postes;
     municipioConsultaActual = municipioSel;
+    fechaConsultaActual = fechaParaConsulta;
 
     document.getElementById('tituloConsultaActual').innerText =
       (municipioSel || "Todos los municipios") + (fechaParaConsulta ? " — " + fechaParaConsulta : "");
@@ -2234,6 +2236,11 @@ function renderizarFechasTotales() {
         "</div>";
     });
     contenedor.innerHTML = html;
+  }
+
+  if (!fechaConsultaActual) {
+    document.querySelectorAll('.chkFechaTotales').forEach(function(c) { c.checked = true; });
+    document.getElementById('btnMarcarTodasFechas').innerText = "Quitar todas las fechas";
   }
 
   recalcularSeleccionTotales();
